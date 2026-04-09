@@ -1,6 +1,6 @@
 # Bazaar — Microservice Template
 
-Template base para microservicios Python / FastAPI del ecosistema **Bazaar**.
+Base inicial para el microservicio `user-service`, construido sobre el template de microservicios con FastAPI y PostgreSQL.
 
 ## Stack
 
@@ -53,7 +53,7 @@ Template base para microservicios Python / FastAPI del ecosistema **Bazaar**.
 
 ```bash
 # 1. Clonar y entrar al directorio
-git clone <REPO_URL> && cd template-microservice
+git clone https://github.com/bazaar-grupo16/user-microservice.git && cd user-microservice
 
 # 2. Crear entorno virtual
 python -m venv .venv
@@ -121,8 +121,8 @@ docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
 ## Docker
 
 ```bash
-docker build -t template-service .
-docker run -p 8000:8000 --env-file .env template-service
+docker build -t user-service .
+docker run -p 8000:8000 --env-file .env user-service
 ```
 
 ## Kubernetes

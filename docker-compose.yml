@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:17.9-bookworm
+    container_name: user-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-user_db}
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .  
+    container_name: user-api
+    restart: always
+    ports:
+      - "8080:8000" 
+    env_file:
+      - .env  
+    environment:
+      DB_HOST: db
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
