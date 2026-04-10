@@ -18,6 +18,7 @@ from src.core.config import get_settings
 from src.core.database import Base, engine, wait_for_db
 from src.core.logging import setup_logging
 
+from src.models.user import User
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
