@@ -1,6 +1,5 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
-from uuid import UUID
 from datetime import datetime
 
 class UserCreate(BaseModel):
@@ -9,7 +8,7 @@ class UserCreate(BaseModel):
     name: Optional[str] = None
 
 class UserResponse(BaseModel):
-    id: UUID
+    id: int
     email: EmailStr
     name: Optional[str]
     is_active: bool
