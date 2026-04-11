@@ -57,3 +57,59 @@ class TestAuthRegister:
         )
 
         assert response.status_code == 422
+
+
+class TestAuthLogin:
+    def _register_payload(self, email: str, password: str = "correct-password") -> dict[str, str | None]:
+        return {
+            "email": email,
+            "password": password,
+            "name": "Login User",
+        }
+
+    def test_login_returns_200_for_valid_credentials(self, client: TestClient) -> None:
+        email = f"login-{uuid4().hex}@example.com"
+        password = "correct-password"
+
+        register_response = client.post(
+            "/auth/register",
+            json=self._register_payload(email=email, password=password),
+        )
+        assert register_response.status_code == 201
+
+        login_response = client.post(
+            "/auth/login",
+            json={"email": email, "password": password},
+        )
+
+        assert login_response.status_code == 200
+        assert login_response.json() == {"message": "Login successful"}
+
+    def test_login_returns_generic_401_for_wrong_password(self, client: TestClient) -> None:
+        email = f"login-wrong-pass-{uuid4().hex}@example.com"
+
+        register_response = client.post(
+            "/auth/register",
+            json=self._register_payload(email=email, password="correct-password"),
+        )
+        assert register_response.status_code == 201
+
+        login_response = client.post(
+            "/auth/login",
+            json={"email": email, "password": "wrong-password"},
+        )
+
+        assert login_response.status_code == 401
+        assert login_response.json() == {"detail": "Invalid credentials"}
+
+    def test_login_returns_generic_401_for_unregistered_email(self, client: TestClient) -> None:
+        login_response = client.post(
+            "/auth/login",
+            json={
+                "email": f"not-found-{uuid4().hex}@example.com",
+                "password": "any-password",
+            },
+        )
+
+        assert login_response.status_code == 401
+        assert login_response.json() == {"detail": "Invalid credentials"}
