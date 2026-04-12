@@ -3,7 +3,7 @@
 These tests exercise the controller through the FastAPI route and use the
 real PostgreSQL-backed test setup.
 """
-
+import pytest
 from datetime import datetime
 from uuid import uuid4
 
@@ -57,6 +57,31 @@ class TestAuthRegister:
         )
 
         assert response.status_code == 422
+    
+    @pytest.mark.parametrize(
+        "bad_password, expected_error_msg",
+        [
+            ("Short1!", "Password must be at least 8 characters long"),
+            ("NOLOWERCASE123!", "Password must contain at least one lowercase letter"),
+            ("nouppercase123!", "Password must contain at least one uppercase letter"),
+            ("Only1Number!", "Password must contain at least 2 numbers"),
+            ("NoSpecialChars12", "Password must contain at least one special character"),
+        ]
+    )
+    def test_register_rejects_weak_passwords(self, client: TestClient, bad_password: str, expected_error_msg: str) -> None:
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": f"weak-pass-{uuid4().hex}@example.com",
+                "password": bad_password,
+                "name": "Test User",
+            },
+        )
+
+        assert response.status_code == 422
+        
+        errors = response.json()["detail"]
+        assert expected_error_msg in errors[0]["msg"]
 
 
 class TestAuthLogin:
