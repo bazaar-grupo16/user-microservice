@@ -14,7 +14,7 @@ class TestAuthRegister:
     def _payload(self, email: str) -> dict[str, str | None]:
         return {
             "email": email,
-            "password": "super-secret-password",
+            "password": "Correct-P4ssw0rd!",
             "name": "Test User",
         }
 
@@ -51,7 +51,7 @@ class TestAuthRegister:
             "/auth/register",
             json={
                 "email": "not-an-email",
-                "password": "super-secret-password",
+                "password": "Correct-P4ssw0rd!",
                 "name": "Test User",
             },
         )
@@ -60,7 +60,7 @@ class TestAuthRegister:
 
 
 class TestAuthLogin:
-    def _register_payload(self, email: str, password: str = "correct-password") -> dict[str, str | None]:
+    def _register_payload(self, email: str, password: str = "Correct-P4ssw0rd!") -> dict[str, str | None]:
         return {
             "email": email,
             "password": password,
@@ -69,7 +69,7 @@ class TestAuthLogin:
 
     def test_login_returns_200_for_valid_credentials(self, client: TestClient) -> None:
         email = f"login-{uuid4().hex}@example.com"
-        password = "correct-password"
+        password = "Correct-P4ssw0rd!"
 
         register_response = client.post(
             "/auth/register",
@@ -90,7 +90,7 @@ class TestAuthLogin:
 
         register_response = client.post(
             "/auth/register",
-            json=self._register_payload(email=email, password="correct-password"),
+            json=self._register_payload(email=email, password="Correct-P4ssw0rd!"),
         )
         assert register_response.status_code == 201
 
@@ -107,7 +107,7 @@ class TestAuthLogin:
             "/auth/login",
             json={
                 "email": f"not-found-{uuid4().hex}@example.com",
-                "password": "any-password",
+                "password": "Correct-P4ssw0rd!",
             },
         )
 
