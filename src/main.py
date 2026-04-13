@@ -25,6 +25,7 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Application startup / shutdown lifecycle hook."""
