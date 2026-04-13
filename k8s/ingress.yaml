@@ -1,0 +1,70 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: users-ingress-auth
+  namespace: bazaar-dev
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /auth/$1
+
+    # ── CORS Configuration ───────────────────────────────────────────────────
+    # Habilita el manejo de CORS por NGINX.
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+
+    # Orígenes permitidos. En producción, reemplaza "*" por tu dominio frontend.
+    # Ejemplo: "https://app.mybazaar.com"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+
+    # Métodos HTTP permitidos.
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+
+    # Headers que el cliente puede enviar.
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT, Keep-Alive, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Content-Type, Range, Authorization"
+
+    # Tiempo que el navegador puede cachear la respuesta preflight (en segundos).
+    nginx.ingress.kubernetes.io/cors-max-age: "1728000"
+
+    # Permite enviar cookies/credenciales cross-origin.
+    # IMPORTANTE: Si cors-allow-credentials es "true", cors-allow-origin NO puede
+    # ser "*" — debe ser un dominio específico.
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "false"
+    # ─────────────────────────────────────────────────────────────────────────
+
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /(login|register)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: users-service
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: users-ingress-health
+  namespace: bazaar-dev
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /livez
+            pathType: Exact
+            backend:
+              service:
+                name: users-service
+                port:
+                  number: 80
+          - path: /readyz
+            pathType: Exact
+            backend:
+              service:
+                name: users-service
+                port:
+                  number: 80
