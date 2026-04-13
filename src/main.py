@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 
 from src.api.health import router as health_router
+from src.api.routers.auth import router as auth_router
 from src.core.config import get_settings
 from src.core.database import Base, engine, wait_for_db
 from src.core.logging import setup_logging
@@ -45,3 +46,4 @@ app = FastAPI(
 
 # ── Routers ──────────────────────────────────────────
 app.include_router(health_router)
+app.include_router(auth_router)

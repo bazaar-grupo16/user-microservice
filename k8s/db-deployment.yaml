@@ -4,18 +4,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: bazaar-db
+  name: user-db
   labels:
-    app: bazaar-db
+    app: user-db
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: bazaar-db
+      app: user-db
   template:
     metadata:
       labels:
-        app: bazaar-db
+        app: user-db
     spec:
       containers:
         - name: postgres
@@ -27,17 +27,17 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: bazaar-db-credentials
+                  name: user-db-credentials
                   key: DB_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: bazaar-db-credentials
+                  name: user-db-credentials
                   key: DB_PASSWORD
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: bazaar-db-credentials
+                  name: user-db-credentials
                   key: DB_NAME
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
@@ -60,9 +60,9 @@ spec:
             periodSeconds: 10
           # ── Resources ──────────────────────────────
           resources:
-            # requests:
-            #   cpu: 100m
-            #   memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
             limits:
               cpu: 500m
               memory: 512Mi
@@ -73,4 +73,4 @@ spec:
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
-            claimName: bazaar-db-pvc
+            claimName: user-db-pvc
