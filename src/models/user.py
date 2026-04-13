@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, String, Boolean, DateTime, Integer
 from src.core.database import Base
 
+
 class User(Base):
     __tablename__ = "users"
 

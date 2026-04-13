@@ -26,7 +26,4 @@ def login_user(user_in: UserLogin, db: Session):
             detail="Invalid credentials",
         )
     access_token = create_access_token(data={"sub": str(user.id)})
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    return {"access_token": access_token, "token_type": "bearer"}
