@@ -49,6 +49,142 @@ Base inicial para el microservicio `user-service`, construido sobre el template 
 └── .env.example
 ```
 
+## Endpoints
+Tambien tener en cuenta que fastapi genera documentacion de endpoints estylo swaggerui en el endpoint `/docs`
+
+### Health
+
+#### GET /livez
+
+Liveness probe. Verifica que el proceso HTTP está vivo.
+
+- `200 OK`
+
+```json
+{
+	"status": "alive"
+}
+```
+
+- Errores:
+	- No tiene errores de negocio implementados.
+
+#### GET /readyz
+
+Readiness probe. Verifica conectividad con la base de datos.
+
+- `200 OK`
+
+```json
+{
+	"status": "ready"
+}
+```
+
+- `503 Service Unavailable` (cuando la base no es alcanzable)
+
+```json
+{
+	"status": "unavailable"
+}
+```
+
+### Auth
+
+#### POST /auth/register
+
+Registra un usuario nuevo.
+
+Body esperado:
+
+```json
+{
+	"email": "user@example.com",
+	"password": "Correct-P4ssw0rd!",
+	"name": "Test User"
+}
+```
+
+- `201 Created`
+
+```json
+{
+	"id": 1,
+	"email": "user@example.com",
+	"name": "Test User",
+	"is_active": true,
+	"created_at": "2026-04-15T12:34:56.789012"
+}
+```
+
+- Errores:
+	- `400 Bad Request` si el email ya existe.
+
+```json
+{
+	"detail": "User with this email already exists"
+}
+```
+
+	- `422 Unprocessable Entity` si el payload es inválido (ej: email inválido o password que no cumple reglas).
+
+Ejemplo de error de validación:
+
+```json
+{
+	"detail": [
+		{
+			"type": "value_error",
+			"loc": ["body", "password"],
+			"msg": "Value error, Password must contain at least one special character",
+			"input": "NoSpecialChars12"
+		}
+	]
+}
+```
+
+#### POST /auth/login
+
+Autentica un usuario y devuelve JWT.
+
+Body esperado:
+
+```json
+{
+	"email": "user@example.com",
+	"password": "Correct-P4ssw0rd!"
+}
+```
+
+- `200 OK`
+
+```json
+{
+	"access_token": "<jwt>",
+	"token_type": "bearer"
+}
+```
+
+- Errores:
+	- `401 Unauthorized` si el email no existe o la contraseña es incorrecta.
+
+```json
+{
+	"detail": "Invalid credentials"
+}
+```
+
+	- `422 Unprocessable Entity` si el payload es inválido (ej: email mal formado o campos faltantes).
+
+## Mapeo de Rutas
+Las rutas del microservicio se mapean al ambiente de kubernetes con pequeñas diferencias:
+* `/auth/login` -> `/login`
+* `/auth/register` -> `/register`
+* `/livez` -> `/livez`
+* `/readyz` -> `/readyz`
+
+Esto se configura en el [ingress controller config](k8s/ingress.yaml) de este microservicio 
+
 ## Setup local
 
 ```bash
@@ -92,6 +228,8 @@ doctl kubernetes cluster kubeconfig save <CLUSTER_ID>
 |--------|------|-------------|
 | GET | `/livez` | Liveness probe — siempre 200 |
 | GET | `/readyz` | Readiness probe — verifica conexión a DB |
+| POST | `/auth/register` | Registro de usuario |
+| POST | `/auth/login` | Login y emisión de token JWT |
 | GET | `/docs` | Swagger UI (auto-generado) |
 | GET | `/redoc` | ReDoc (auto-generado) |
 
