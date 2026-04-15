@@ -16,6 +16,13 @@ on:
       - "requirements.txt"
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_deploy:
+        description: "Run deploy to Kubernetes"
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -74,7 +81,7 @@ jobs:
     name: Build & Push
     needs: [lint, test]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
 
     steps:
       - uses: actions/checkout@v4
@@ -104,7 +111,7 @@ jobs:
     name: Deploy to K8s
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.run_deploy)
   
     steps:
       - uses: actions/checkout@v4
