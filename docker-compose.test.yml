@@ -7,7 +7,7 @@
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17.9-bookworm
     environment:
       POSTGRES_USER: test_user
       POSTGRES_PASSWORD: test_password

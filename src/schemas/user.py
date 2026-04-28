@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 from typing import Optional
 from datetime import datetime
 import re
+import uuid
 
 
 class UserCreate(BaseModel):
@@ -26,7 +27,7 @@ class UserCreate(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: int
+    id: uuid.UUID
     email: EmailStr
     name: Optional[str]
     is_active: bool
@@ -43,3 +44,9 @@ class UserLogin(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class MessageResponse(BaseModel):
+    message: str
