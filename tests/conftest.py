@@ -15,7 +15,6 @@ from fastapi.testclient import TestClient
 from src.core.database import Base, engine
 from src.main import app
 import os
-from uuid import uuid4
 
 # Provide a simple mock for the external auth service during tests.
 @pytest.fixture(autouse=True)

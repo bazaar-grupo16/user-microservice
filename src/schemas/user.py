@@ -3,7 +3,6 @@ from typing import Optional
 from datetime import datetime
 import uuid
 import re
-import uuid
 
 
 class UserCreate(BaseModel):
