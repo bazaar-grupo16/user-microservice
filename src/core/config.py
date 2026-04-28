@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_NAME: str
 
+# ── Resend ───────────────────────────────────────────
+    RESEND_API_KEY: str = ""
+
     # ── Pydantic-settings config ─────────────────────
     model_config = SettingsConfigDict(
         env_file=".env",

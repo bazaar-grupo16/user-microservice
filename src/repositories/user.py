@@ -1,7 +1,9 @@
 from sqlalchemy.orm import Session
-from src.models.user import User
+from src.models.user import User, VerificationCode
+from datetime import datetime
 from src.schemas.user import UserCreate
 from src.core.security import get_password_hash
+import uuid
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:
@@ -10,10 +12,37 @@ def get_user_by_email(db: Session, email: str) -> User | None:
 
 def create_user(db: Session, user_in: UserCreate) -> User:
     hashed_pass = get_password_hash(user_in.password)
-    new_user = User(email=user_in.email, password=hashed_pass, name=user_in.name)
+    new_user = User(id=uuid.uuid4(),email=user_in.email, password=hashed_pass, name=user_in.name)
 
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
     return new_user
+
+def create_verification_code(db: Session, user_id: uuid.UUID, code: str, expires_at: datetime) -> VerificationCode:
+    new_code = VerificationCode(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        code=code,
+        expires_at=expires_at
+    )
+    db.add(new_code)
+    db.commit()
+    db.refresh(new_code)
+    return new_code
+
+def get_verification_code(db: Session, user_id: uuid.UUID, code: str) -> VerificationCode | None:
+    return db.query(VerificationCode).filter(
+        VerificationCode.user_id == user_id,
+        VerificationCode.code == code
+    ).first()
+
+def update_user_password(db: Session, user: User, hashed_pass: str):
+    user.password = hashed_pass
+    db.commit()
+    db.refresh(user)
+
+def delete_verification_code(db: Session, verification_code: VerificationCode):
+    db.delete(verification_code)
+    db.commit()
