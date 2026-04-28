@@ -14,6 +14,23 @@ from fastapi.testclient import TestClient
 
 from src.core.database import Base, engine
 from src.main import app
+import os
+from uuid import uuid4
+
+# Provide a simple mock for the external auth service during tests.
+@pytest.fixture(autouse=True)
+def mock_external_auth_service(monkeypatch):
+    # Ensure the app has an AUTH_SERVICE_URL so the client code will attempt to call it.
+    os.environ["AUTH_SERVICE_URL"] = "http://external-auth.test"
+
+    # Monkeypatch the auth_client.issue_token to return a deterministic token
+    from src.services import auth_client
+
+    def _fake_issue_token(user_id, timeout: float = 5.0):
+        return {"access_token": f"token-for-{user_id}", "token_type": "bearer", "expires_in": 3600}
+
+    monkeypatch.setattr(auth_client, "issue_token", _fake_issue_token)
+    yield
 
 
 @pytest.fixture(scope="session", autouse=True)
