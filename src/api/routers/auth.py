@@ -4,7 +4,7 @@ from src.core.dependencies import DbSession
 from src.schemas.user import LoginResponse, UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, MessageResponse, VerifyCodeRequest, ResetPasswordRequest
 from src.api.controllers import auth as auth_controller
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(tags=["Auth"])
 
 
 @router.post(

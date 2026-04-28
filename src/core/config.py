@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
     DB_NAME: str
+    # ── External Auth Service ─────────────────────────
+    AUTH_SERVICE_URL: str = "http://auth-service:8000"
 
 # ── Resend ───────────────────────────────────────────
     RESEND_API_KEY: str = ""
