@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Uuid, Column, ForeignKey, String, Boolean, DateTime, Integer
+from sqlalchemy import Uuid, Column, ForeignKey, String, Boolean, DateTime
 from src.core.database import Base
 
 
