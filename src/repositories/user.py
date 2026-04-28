@@ -31,3 +31,18 @@ def create_verification_code(db: Session, user_id: uuid.UUID, code: str, expires
     db.commit()
     db.refresh(new_code)
     return new_code
+
+def get_verification_code(db: Session, user_id: uuid.UUID, code: str) -> VerificationCode | None:
+    return db.query(VerificationCode).filter(
+        VerificationCode.user_id == user_id,
+        VerificationCode.code == code
+    ).first()
+
+def update_user_password(db: Session, user: User, hashed_pass: str):
+    user.password = hashed_pass
+    db.commit()
+    db.refresh(user)
+
+def delete_verification_code(db: Session, verification_code: VerificationCode):
+    db.delete(verification_code)
+    db.commit()

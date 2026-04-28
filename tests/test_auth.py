@@ -5,7 +5,7 @@ real PostgreSQL-backed test setup.
 """
 import pytest
 from datetime import datetime
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 from fastapi.testclient import TestClient
 
@@ -26,7 +26,8 @@ class TestAuthRegister:
         assert response.status_code == 201
 
         body = response.json()
-        assert body["id"] > 0
+        assert isinstance(body["id"], str)
+        assert UUID(body["id"])
         assert body["email"] == email
         assert body["name"] == "Test User"
         assert body["is_active"] is True

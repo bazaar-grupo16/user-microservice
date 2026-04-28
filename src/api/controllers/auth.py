@@ -2,8 +2,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from src.schemas.user import UserCreate, UserLogin
 from src.repositories import user as user_repo
-from src.core.security import verify_password, create_access_token
-from src.schemas.user import ForgotPasswordRequest
+from src.core.security import verify_password, create_access_token, get_password_hash
+from src.schemas.user import ForgotPasswordRequest, VerifyCodeRequest, ResetPasswordRequest
 import resend
 import random
 from datetime import datetime, timedelta
@@ -69,3 +69,35 @@ def forgot_password(request: ForgotPasswordRequest, db: Session):
         raise HTTPException(status_code=500, detail="Error al intentar enviar el correo.")
 
     return success_message
+
+def verify_code(request: VerifyCodeRequest, db: Session):
+    user = user_repo.get_user_by_email(db, email=request.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    db_code = user_repo.get_verification_code(db, user_id=user.id, code=request.code)
+    
+    if not db_code:
+        raise HTTPException(status_code=400, detail="Código inválido")
+    
+    if db_code.expires_at < datetime.utcnow():
+        user_repo.delete_verification_code(db, db_code)
+        raise HTTPException(status_code=400, detail="El código ha expirado")
+
+    return {"message": "Código verificado con éxito"}
+
+def reset_password(request: ResetPasswordRequest, db: Session):
+    user = user_repo.get_user_by_email(db, email=request.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    db_code = user_repo.get_verification_code(db, user_id=user.id, code=request.code)
+    if not db_code or db_code.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Sesión de recuperación inválida o expirada")
+
+    hashed_pass = get_password_hash(request.new_password)
+    user_repo.update_user_password(db, user=user, hashed_pass=hashed_pass)
+    
+    user_repo.delete_verification_code(db, db_code)
+
+    return {"message": "Contraseña actualizada correctamente"}
