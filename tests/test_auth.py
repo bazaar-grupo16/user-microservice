@@ -21,7 +21,7 @@ class TestAuthRegister:
     def test_register_returns_created_user(self, client: TestClient) -> None:
         email = f"user-{uuid4().hex}@example.com"
 
-        response = client.post("/auth/register", json=self._payload(email))
+        response = client.post("/register", json=self._payload(email))
 
         assert response.status_code == 201
 
@@ -37,10 +37,10 @@ class TestAuthRegister:
         email = f"duplicate-{uuid4().hex}@example.com"
         payload = self._payload(email)
 
-        first_response = client.post("/auth/register", json=payload)
+        first_response = client.post("/register", json=payload)
         assert first_response.status_code == 201
 
-        duplicate_response = client.post("/auth/register", json=payload)
+        duplicate_response = client.post("/register", json=payload)
 
         assert duplicate_response.status_code == 400
         assert duplicate_response.json() == {
@@ -49,7 +49,7 @@ class TestAuthRegister:
 
     def test_register_rejects_invalid_email(self, client: TestClient) -> None:
         response = client.post(
-            "/auth/register",
+            "/register",
             json={
                 "email": "not-an-email",
                 "password": "Correct-P4ssw0rd!",
@@ -71,7 +71,7 @@ class TestAuthRegister:
     )
     def test_register_rejects_weak_passwords(self, client: TestClient, bad_password: str, expected_error_msg: str) -> None:
         response = client.post(
-            "/auth/register",
+            "/register",
             json={
                 "email": f"weak-pass-{uuid4().hex}@example.com",
                 "password": bad_password,
@@ -98,13 +98,13 @@ class TestAuthLogin:
         password = "Correct-P4ssw0rd!"
 
         register_response = client.post(
-            "/auth/register",
+            "/register",
             json=self._register_payload(email=email, password=password),
         )
         assert register_response.status_code == 201
 
         login_response = client.post(
-            "/auth/login",
+            "/login",
             json={"email": email, "password": password},
         )
 
@@ -117,13 +117,13 @@ class TestAuthLogin:
         email = f"login-wrong-pass-{uuid4().hex}@example.com"
 
         register_response = client.post(
-            "/auth/register",
+            "/register",
             json=self._register_payload(email=email, password="Correct-P4ssw0rd!"),
         )
         assert register_response.status_code == 201
 
         login_response = client.post(
-            "/auth/login",
+            "/login",
             json={"email": email, "password": "wrong-password"},
         )
 
@@ -132,7 +132,7 @@ class TestAuthLogin:
 
     def test_login_returns_generic_401_for_unregistered_email(self, client: TestClient) -> None:
         login_response = client.post(
-            "/auth/login",
+            "/login",
             json={
                 "email": f"not-found-{uuid4().hex}@example.com",
                 "password": "Correct-P4ssw0rd!",

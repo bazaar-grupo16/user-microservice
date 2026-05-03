@@ -2,12 +2,13 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from src.schemas.user import UserCreate, UserLogin
 from src.repositories import user as user_repo
-from src.core.security import verify_password, create_access_token, get_password_hash
+from src.core.security import verify_password, get_password_hash
 from src.schemas.user import ForgotPasswordRequest, VerifyCodeRequest, ResetPasswordRequest
 import resend
 import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
+from src.services import auth_client
 
 settings = get_settings()
 resend.api_key = settings.RESEND_API_KEY
@@ -32,8 +33,9 @@ def login_user(user_in: UserLogin, db: Session):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    access_token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer"}
+    token_response = auth_client.issue_token(user_id=user.id)
+    # Expect at least `access_token` and `token_type` in response
+    return token_response
 
 def forgot_password(request: ForgotPasswordRequest, db: Session):
     user = user_repo.get_user_by_email(db=db, email=request.email)

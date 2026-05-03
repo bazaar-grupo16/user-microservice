@@ -6,7 +6,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /auth/$1
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
 
     # ── CORS Configuration ───────────────────────────────────────────────────
     # Habilita el manejo de CORS por NGINX.
@@ -35,7 +35,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /(login|register)
+          - path: /(login|register|forgot-password|verify-code|reset-password)
             pathType: ImplementationSpecific
             backend:
               service:

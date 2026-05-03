@@ -22,7 +22,7 @@ class TestLoginAcceptance:
         name: str = "Acceptance User",
     ) -> None:
         response = client.post(
-            "/auth/register",
+            "/register",
             json={"email": email, "password": password, "name": name},
         )
         assert response.status_code == 201
@@ -35,7 +35,7 @@ class TestLoginAcceptance:
         self._register_user(client=client, email=email, password=password)
 
         response = client.post(
-            "/auth/login",
+            "/login",
             json={"email": email, "password": password},
         )
 
@@ -51,7 +51,7 @@ class TestLoginAcceptance:
         self._register_user(client=client, email=email, password="correct-password")
 
         response = client.post(
-            "/auth/login",
+            "/login",
             json={"email": email, "password": "wrong-password"},
         )
 
@@ -62,7 +62,7 @@ class TestLoginAcceptance:
         self, client: TestClient
     ) -> None:
         response = client.post(
-            "/auth/login",
+            "/login",
             json={
                 "email": f"unknown-{uuid4().hex}@example.com",
                 "password": "any-password",
@@ -76,7 +76,7 @@ class TestLoginAcceptance:
         self, client: TestClient
     ) -> None:
         response = client.get(
-            "/auth/protected-action",
+            "/protected-action",
             headers={"Authorization": "Bearer expired-or-invalid-token"},
         )
 
