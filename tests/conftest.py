@@ -26,7 +26,13 @@ def mock_external_auth_service(monkeypatch):
     from src.services import auth_client
 
     def _fake_issue_token(user_id, timeout: float = 5.0):
-        return {"access_token": f"token-for-{user_id}", "token_type": "bearer", "expires_in": 3600}
+        return {
+            "access_token": f"token-for-{user_id}",
+            "refresh_token": f"refresh-token-for-{user_id}",
+            "token_type": "bearer",
+            "expires_in": 3600,
+            "refresh_expires_in": 1209600,
+        }
 
     monkeypatch.setattr(auth_client, "issue_token", _fake_issue_token)
     yield

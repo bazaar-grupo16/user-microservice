@@ -110,8 +110,11 @@ class TestAuthLogin:
 
         assert login_response.status_code == 200
         body = login_response.json()
-        assert "access_token" in body
+        assert isinstance(body["access_token"], str)
+        assert isinstance(body["refresh_token"], str)
         assert body["token_type"] == "bearer"
+        assert isinstance(body["expires_in"], int)
+        assert isinstance(body["refresh_expires_in"], int)
 
     def test_login_returns_generic_401_for_wrong_password(self, client: TestClient) -> None:
         email = f"login-wrong-pass-{uuid4().hex}@example.com"

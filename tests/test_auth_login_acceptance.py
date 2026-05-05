@@ -42,7 +42,10 @@ class TestLoginAcceptance:
         assert response.status_code == 200
         body = response.json()
         assert body["access_token"]
+        assert body["refresh_token"]
         assert body["token_type"] == "bearer"
+        assert isinstance(body["expires_in"], int)
+        assert isinstance(body["refresh_expires_in"], int)
 
     def test_login_with_wrong_password_returns_generic_error(
         self, client: TestClient

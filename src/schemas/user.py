@@ -42,8 +42,13 @@ class UserLogin(BaseModel):
 
 
 class LoginResponse(BaseModel):
+    """Response returned after issuing an access/refresh token pair."""
+
     access_token: str
-    token_type: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    refresh_expires_in: int
 
 class ForgotPasswordRequest(BaseModel):
     email: str
