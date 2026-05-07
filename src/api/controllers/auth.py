@@ -35,7 +35,7 @@ def login_user(user_in: UserLogin, db: Session):
         )
     token_response = auth_client.issue_token(user_id=user.id)
     # Expect at least `access_token` and `token_type` in response
-    return {**token_response, "user_id": user.id}
+    return token_response
 
 def forgot_password(request: ForgotPasswordRequest, db: Session):
     user = user_repo.get_user_by_email(db=db, email=request.email)

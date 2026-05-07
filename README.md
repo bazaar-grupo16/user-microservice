@@ -160,12 +160,8 @@ Body esperado:
 
 ```json
 {
-	"user_id": "123e4567-e89b-12d3-a456-426614174000",
 	"access_token": "<jwt>",
-	"refresh_token": "<jwt>",
 	"token_type": "bearer",
-	"expires_in": 3600,
-	"refresh_expires_in": 86400
 }
 ```
 
