@@ -43,7 +43,7 @@ class UserLogin(BaseModel):
 
 class LoginResponse(BaseModel):
     """Response returned after issuing an access/refresh token pair."""
-
+    
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
