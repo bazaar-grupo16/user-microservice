@@ -9,7 +9,6 @@ import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
 from src.services import auth_client, profile_client
-import httpx
 
 settings = get_settings()
 resend.api_key = settings.RESEND_API_KEY
