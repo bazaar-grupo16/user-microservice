@@ -37,6 +37,23 @@ def mock_external_auth_service(monkeypatch):
     monkeypatch.setattr(auth_client, "issue_token", _fake_issue_token)
     yield
 
+@pytest.fixture(autouse=True)
+def mock_profile_service(monkeypatch):
+    """Mockea nuestro propio cliente de perfiles durante los tests."""
+    
+    os.environ["PROFILE_SERVICE_URL"] = "http://fake-profile-service.test"
+
+    from src.services import profile_client
+
+    def _fake_create_profile(user_id: str, name: str):
+        return {
+            "id": "fake-profile-uuid",
+            "user_id": user_id,
+            "name": name
+        }
+
+    monkeypatch.setattr(profile_client, "create_profile", _fake_create_profile)
+    yield
 
 @pytest.fixture(scope="session", autouse=True)
 def _setup_database():

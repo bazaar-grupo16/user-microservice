@@ -8,7 +8,7 @@ import resend
 import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
-from src.services import auth_client
+from src.services import auth_client, profile_client
 import httpx
 
 settings = get_settings()
@@ -24,25 +24,10 @@ def register_user(user_in: UserCreate, db: Session):
         )
     new_user = user_repo.create_user(db, user_in=user_in)
 
-    profile_url = settings.PROFILE_SERVICE_URL  
-
-    profile_payload = {
-        "user_id": str(new_user.id),
-        "name": user_in.name
-    }
-
-    try:
-        with httpx.Client() as client:
-            response = client.post(profile_url, json=profile_payload, timeout=5.0)
-            
-            response.raise_for_status() 
-            
-    except httpx.HTTPError as e:
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Usuario creado en Auth, pero falló la creación del perfil: {str(e)}"
-        )
+    profile_client.create_profile(
+        user_id=str(new_user.id),
+        name=user_in.name
+    )
 
     return new_user
 
