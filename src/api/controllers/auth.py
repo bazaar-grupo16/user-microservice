@@ -9,6 +9,7 @@ import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
 from src.services import auth_client
+import httpx
 
 settings = get_settings()
 resend.api_key = settings.RESEND_API_KEY
@@ -23,6 +24,26 @@ def register_user(user_in: UserCreate, db: Session):
         )
     new_user = user_repo.create_user(db, user_in=user_in)
 
+    profile_url = settings.PROFILE_SERVICE_URL  
+
+    profile_payload = {
+        "user_id": str(new_user.id),
+        "name": user_in.name
+    }
+
+    try:
+        with httpx.Client() as client:
+            response = client.post(profile_url, json=profile_payload, timeout=5.0)
+            
+            response.raise_for_status() 
+            
+    except httpx.HTTPError as e:
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Usuario creado en Auth, pero falló la creación del perfil: {str(e)}"
+        )
+
     return new_user
 
 
@@ -34,7 +55,7 @@ def login_user(user_in: UserLogin, db: Session):
             detail="Invalid credentials",
         )
     token_response = auth_client.issue_token(user_id=user.id)
-    # Expect at least `access_token` and `token_type` in response
+
     return token_response
 
 def forgot_password(request: ForgotPasswordRequest, db: Session):

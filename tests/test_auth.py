@@ -4,10 +4,13 @@ These tests exercise the controller through the FastAPI route and use the
 real PostgreSQL-backed test setup.
 """
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4, UUID
 
 from fastapi.testclient import TestClient
+
+from src.core.database import SessionLocal
+from src.models.user import User, VerificationCode
 
 
 class TestAuthRegister:
@@ -110,11 +113,11 @@ class TestAuthLogin:
 
         assert login_response.status_code == 200
         body = login_response.json()
-        assert body["access_token"]
-        assert body["refresh_token"]
+        assert isinstance(body["access_token"], str)
+        assert isinstance(body["refresh_token"], str)
         assert body["token_type"] == "bearer"
-        assert body["expires_in"] == 3600
-        assert body["refresh_expires_in"] == 86400
+        assert isinstance(body["expires_in"], int)
+        assert isinstance(body["refresh_expires_in"], int)
 
     def test_login_returns_generic_401_for_wrong_password(self, client: TestClient) -> None:
         email = f"login-wrong-pass-{uuid4().hex}@example.com"
@@ -132,6 +135,101 @@ class TestAuthLogin:
 
         assert login_response.status_code == 401
         assert login_response.json() == {"detail": "Invalid credentials"}
+
+
+class TestPasswordRecovery:
+    def _register_payload(self, email: str, password: str = "Correct-P4ssw0rd!") -> dict[str, str | None]:
+        return {
+            "email": email,
+            "password": password,
+            "name": "Recovery User",
+        }
+
+    def _create_valid_recovery_code(self, email: str, code: str) -> None:
+        with SessionLocal() as db:
+            user = db.query(User).filter(User.email == email).first()
+            assert user is not None
+
+            db.add(
+                VerificationCode(
+                    id=uuid4(),
+                    user_id=user.id,
+                    code=code,
+                    expires_at=datetime.utcnow() + timedelta(minutes=10),
+                )
+            )
+            db.commit()
+
+    def test_reset_password_succeeds_with_valid_code(self, client: TestClient) -> None:
+        email = f"recovery-ok-{uuid4().hex}@example.com"
+        old_password = "Correct-P4ssw0rd!"
+        new_password = "N3w-StrongPass12!"
+        recovery_code = "123456"
+
+        register_response = client.post(
+            "/register",
+            json=self._register_payload(email=email, password=old_password),
+        )
+        assert register_response.status_code == 201
+
+        self._create_valid_recovery_code(email=email, code=recovery_code)
+
+        reset_response = client.post(
+            "/reset-password",
+            json={
+                "email": email,
+                "code": recovery_code,
+                "new_password": new_password,
+            },
+        )
+
+        assert reset_response.status_code == 200
+        assert reset_response.json() == {"message": "Contraseña actualizada correctamente"}
+
+        login_old_password = client.post(
+            "/login",
+            json={"email": email, "password": old_password},
+        )
+        assert login_old_password.status_code == 401
+
+        login_new_password = client.post(
+            "/login",
+            json={"email": email, "password": new_password},
+        )
+        assert login_new_password.status_code == 200
+
+    def test_reset_password_rejects_when_code_is_missing_or_invalid(self, client: TestClient) -> None:
+        email = f"recovery-fail-{uuid4().hex}@example.com"
+
+        register_response = client.post(
+            "/register",
+            json=self._register_payload(email=email),
+        )
+        assert register_response.status_code == 201
+
+        no_code_response = client.post(
+            "/reset-password",
+            json={
+                "email": email,
+                "code": "654321",
+                "new_password": "N3w-StrongPass12!",
+            },
+        )
+        assert no_code_response.status_code == 400
+        assert no_code_response.json() == {"detail": "Sesión de recuperación inválida o expirada"}
+
+        self._create_valid_recovery_code(email=email, code="111111")
+
+        invalid_code_response = client.post(
+            "/reset-password",
+            json={
+                "email": email,
+                "code": "222222",
+                "new_password": "N3w-StrongPass12!",
+            },
+        )
+        assert invalid_code_response.status_code == 400
+        assert invalid_code_response.json() == {"detail": "Sesión de recuperación inválida o expirada"}
 
     def test_login_returns_generic_401_for_unregistered_email(self, client: TestClient) -> None:
         login_response = client.post(

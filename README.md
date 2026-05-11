@@ -161,7 +161,7 @@ Body esperado:
 ```json
 {
 	"access_token": "<jwt>",
-	"token_type": "bearer"
+	"token_type": "bearer",
 }
 ```
 
