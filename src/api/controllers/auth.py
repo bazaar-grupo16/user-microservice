@@ -72,8 +72,9 @@ def forgot_password(request: ForgotPasswordRequest, db: Session):
                 <p>Este código expira en 15 minutos.</p>
             """
         })
-    except Exception:
-        raise HTTPException(status_code=500, detail="Error al intentar enviar el correo.")
+    except Exception as e:
+        error_real = str(e)
+        raise HTTPException(status_code=500, detail=f"Detalle de Resend: {error_real}")
 
     return success_message
 
