@@ -73,8 +73,10 @@ def forgot_password(request: ForgotPasswordRequest, db: Session):
             """
         })
     except Exception as e:
-        error_real = str(e)
-        raise HTTPException(status_code=500, detail=f"Detalle de Resend: {error_real}")
+        print(f"🔥 ERROR FATAL DE RESEND: {str(e)}")
+        
+        # 👇 2. Le pasamos el error crudo (str(e)) al frontend
+        raise HTTPException(status_code=500, detail=f"Detalle de Resend: {str(e)}")
 
     return success_message
 
