@@ -145,7 +145,7 @@ Ejemplo de error de validación:
 
 #### POST /auth/login
 
-Autentica un usuario y devuelve JWT.
+Autentica un usuario y devuelve JWT (access y refresh tokens).
 
 Body esperado:
 
@@ -161,7 +161,10 @@ Body esperado:
 ```json
 {
 	"access_token": "<jwt>",
+	"refresh_token": "<jwt>",
 	"token_type": "bearer",
+	"expires_in": 3600,
+	"refresh_expires_in": 604800
 }
 ```
 
@@ -175,6 +178,131 @@ Body esperado:
 ```
 
 	- `422 Unprocessable Entity` si el payload es inválido (ej: email mal formado o campos faltantes).
+
+#### POST /auth/forgot-password
+
+Inicia el proceso de recuperación de contraseña enviando un código al email registrado.
+
+Body esperado:
+
+```json
+{
+	"email": "user@example.com"
+}
+```
+
+- `200 OK`
+
+```json
+{
+	"message": "Si el email está registrado, te enviaremos un código."
+}
+```
+
+- Notas:
+	- Retorna el mismo mensaje tanto si el email existe como si no, por seguridad.
+	- El código de 6 dígitos se envía por email y expira en 15 minutos.
+	- No tiene errores específicos (siempre retorna 200).
+
+#### POST /auth/verify-code
+
+Verifica que el código de recuperación sea válido.
+
+Body esperado:
+
+```json
+{
+	"email": "user@example.com",
+	"code": "123456"
+}
+```
+
+- `200 OK`
+
+```json
+{
+	"message": "Código verificado con éxito"
+}
+```
+
+- Errores:
+	- `404 Not Found` si el usuario no existe.
+
+```json
+{
+	"detail": "Usuario no encontrado"
+}
+```
+
+	- `400 Bad Request` si el código es inválido o ha expirado.
+
+```json
+{
+	"detail": "Código inválido"
+}
+```
+
+o
+
+```json
+{
+	"detail": "El código ha expirado"
+}
+```
+
+#### POST /auth/reset-password
+
+Completa la recuperación de contraseña actualizando con una nueva contraseña.
+
+Body esperado:
+
+```json
+{
+	"email": "user@example.com",
+	"code": "123456",
+	"new_password": "NewPassw0rd!"
+}
+```
+
+- `200 OK`
+
+```json
+{
+	"message": "Contraseña actualizada correctamente"
+}
+```
+
+- Errores:
+	- `404 Not Found` si el usuario no existe.
+
+```json
+{
+	"detail": "Usuario no encontrado"
+}
+```
+
+	- `400 Bad Request` si el código es inválido o ha expirado.
+
+```json
+{
+	"detail": "Sesión de recuperación inválida o expirada"
+}
+```
+
+	- `422 Unprocessable Entity` si la nueva contraseña no cumple con los requisitos de seguridad (mínimo 8 caracteres, 1 mayúscula, 1 minúscula, 2 números, 1 carácter especial).
+
+```json
+{
+	"detail": [
+		{
+			"type": "value_error",
+			"loc": ["body", "new_password"],
+			"msg": "Value error, Password must contain at least 2 numbers",
+			"input": "NewPasswrd!"
+		}
+	]
+}
+```
 
 ## Mapeo de Rutas
 Las rutas del microservicio se mapean al ambiente de kubernetes con pequeñas diferencias:
@@ -229,7 +357,10 @@ doctl kubernetes cluster kubeconfig save <CLUSTER_ID>
 | GET | `/livez` | Liveness probe — siempre 200 |
 | GET | `/readyz` | Readiness probe — verifica conexión a DB |
 | POST | `/auth/register` | Registro de usuario |
-| POST | `/auth/login` | Login y emisión de token JWT |
+| POST | `/auth/login` | Login y emisión de tokens JWT (access + refresh) |
+| POST | `/auth/forgot-password` | Inicia recuperación de contraseña (envía código por email) |
+| POST | `/auth/verify-code` | Verifica código de recuperación |
+| POST | `/auth/reset-password` | Completa cambio de contraseña |
 | GET | `/docs` | Swagger UI (auto-generado) |
 | GET | `/redoc` | ReDoc (auto-generado) |
 
