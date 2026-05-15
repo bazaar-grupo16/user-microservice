@@ -62,7 +62,7 @@ def forgot_password(request: ForgotPasswordRequest, db: Session):
 
     try:
         resend.Emails.send({
-            "from": "Bazaar App <onboarding@resend.dev>",
+            "from": "Bazaar App <no-reply@tomasbp.com>",
             "to": [user.email], 
             "subject": "Código de recuperación de contraseña",
             "html": f"""
