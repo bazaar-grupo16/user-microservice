@@ -72,11 +72,8 @@ def forgot_password(request: ForgotPasswordRequest, db: Session):
                 <p>Este código expira en 15 minutos.</p>
             """
         })
-    except Exception as e:
-        print(f"🔥 ERROR FATAL DE RESEND: {str(e)}")
-        
-        # 👇 2. Le pasamos el error crudo (str(e)) al frontend
-        raise HTTPException(status_code=500, detail=f"Detalle de Resend: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Error al intentar enviar el correo.")
 
     return success_message
 
