@@ -10,6 +10,7 @@ from uuid import uuid4, UUID
 from fastapi.testclient import TestClient
 
 from src.core.database import SessionLocal
+from src.core.security import get_password_hash
 from src.models.user import User, VerificationCode
 
 
@@ -34,6 +35,7 @@ class TestAuthRegister:
         assert body["email"] == email
         assert body["name"] == "Test User"
         assert body["is_active"] is True
+        assert body["is_admin"] is False
         assert datetime.fromisoformat(body["created_at"])
 
     def test_register_rejects_duplicate_email(self, client: TestClient) -> None:
@@ -135,6 +137,122 @@ class TestAuthLogin:
 
         assert login_response.status_code == 401
         assert login_response.json() == {"detail": "Invalid credentials"}
+
+
+class TestAdminAuth:
+    def _create_user(
+        self,
+        email: str,
+        password: str = "Correct-P4ssw0rd!",
+        is_admin: bool = False,
+        is_active: bool = True,
+        name: str = "Admin Test User",
+    ) -> User:
+        with SessionLocal() as db:
+            user = User(
+                id=uuid4(),
+                email=email,
+                password=get_password_hash(password),
+                name=name,
+                is_active=is_active,
+                is_admin=is_admin,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            db.expunge(user)
+            return user
+
+    def test_admin_login_returns_200_for_admin_user(self, client: TestClient) -> None:
+        email = f"admin-login-{uuid4().hex}@example.com"
+        password = "Correct-P4ssw0rd!"
+        admin = self._create_user(email=email, password=password, is_admin=True)
+
+        response = client.post("/admin/login", json={"email": email, "password": password})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["access_token"] == f"token-for-{admin.id}"
+        assert body["refresh_token"] == f"refresh-token-for-{admin.id}"
+        assert body["token_type"] == "bearer"
+        assert isinstance(body["expires_in"], int)
+        assert isinstance(body["refresh_expires_in"], int)
+
+    def test_admin_login_rejects_regular_user(self, client: TestClient) -> None:
+        email = f"regular-admin-login-{uuid4().hex}@example.com"
+        password = "Correct-P4ssw0rd!"
+        self._create_user(email=email, password=password, is_admin=False)
+
+        response = client.post("/admin/login", json={"email": email, "password": password})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Invalid credentials"}
+
+    def test_admin_login_rejects_inactive_admin(self, client: TestClient) -> None:
+        email = f"inactive-admin-login-{uuid4().hex}@example.com"
+        password = "Correct-P4ssw0rd!"
+        self._create_user(email=email, password=password, is_admin=True, is_active=False)
+
+        response = client.post("/admin/login", json={"email": email, "password": password})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Invalid credentials"}
+
+    def test_admin_login_returns_generic_401_for_invalid_credentials(self, client: TestClient) -> None:
+        email = f"bad-admin-login-{uuid4().hex}@example.com"
+        self._create_user(email=email, password="Correct-P4ssw0rd!", is_admin=True)
+
+        response = client.post("/admin/login", json={"email": email, "password": "wrong-password"})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Invalid credentials"}
+
+    def test_admin_me_returns_current_admin(self, client: TestClient) -> None:
+        email = f"admin-me-{uuid4().hex}@example.com"
+        admin = self._create_user(email=email, is_admin=True, name="Admin Me")
+
+        response = client.get("/admin/me", headers={"Authorization": f"Bearer token-for-{admin.id}"})
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "id": str(admin.id),
+            "email": email,
+            "name": "Admin Me",
+            "is_active": True,
+            "is_admin": True,
+        }
+
+    def test_admin_me_rejects_missing_token(self, client: TestClient) -> None:
+        response = client.get("/admin/me")
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Could not validate credentials"}
+
+    def test_admin_me_rejects_invalid_token(self, client: TestClient) -> None:
+        response = client.get("/admin/me", headers={"Authorization": "Bearer invalid-token"})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Could not validate credentials"}
+
+    def test_admin_me_rejects_regular_user(self, client: TestClient) -> None:
+        user = self._create_user(email=f"regular-admin-me-{uuid4().hex}@example.com", is_admin=False)
+
+        response = client.get("/admin/me", headers={"Authorization": f"Bearer token-for-{user.id}"})
+
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Admin access required"}
+
+    def test_admin_me_rejects_inactive_admin(self, client: TestClient) -> None:
+        admin = self._create_user(
+            email=f"inactive-admin-me-{uuid4().hex}@example.com",
+            is_admin=True,
+            is_active=False,
+        )
+
+        response = client.get("/admin/me", headers={"Authorization": f"Bearer token-for-{admin.id}"})
+
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Admin access required"}
 
 
 class TestPasswordRecovery:

@@ -31,7 +31,18 @@ class UserResponse(BaseModel):
     email: EmailStr
     name: Optional[str]
     is_active: bool
+    is_admin: bool
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminMeResponse(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    name: Optional[str]
+    is_active: bool
+    is_admin: bool
 
     model_config = ConfigDict(from_attributes=True)
 

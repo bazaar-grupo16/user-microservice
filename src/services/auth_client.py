@@ -22,3 +22,16 @@ def issue_token(user_id: UUID, timeout: float = 5.0) -> Dict[str, Any]:
     resp = httpx.post(url, json={"user_id": str(user_id)}, timeout=timeout)
     resp.raise_for_status()
     return resp.json()
+
+
+def validate_token(authorization: str, timeout: float = 5.0) -> Dict[str, Any]:
+    """Validate a bearer token against the external auth service."""
+    settings = get_settings()
+    if not settings.AUTH_SERVICE_URL:
+        raise RuntimeError("AUTH_SERVICE_URL is not configured")
+
+    url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/validate"
+
+    resp = httpx.get(url, headers={"Authorization": authorization}, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()

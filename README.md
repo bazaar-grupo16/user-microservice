@@ -113,6 +113,7 @@ Body esperado:
 	"email": "user@example.com",
 	"name": "Test User",
 	"is_active": true,
+	"is_admin": false,
 	"created_at": "2026-04-15T12:34:56.789012"
 }
 ```
@@ -178,6 +179,43 @@ Body esperado:
 ```
 
 	- `422 Unprocessable Entity` si el payload es inválido (ej: email mal formado o campos faltantes).
+
+#### POST /admin/login
+
+Autentica un usuario administrador y devuelve JWT (access y refresh tokens). Usa el mismo body y la misma respuesta que `/login`, pero solo permite usuarios activos con `is_admin=true`.
+
+- `401 Unauthorized` si las credenciales son invalidas, el usuario esta inactivo o no es admin.
+
+```json
+{
+	"detail": "Invalid credentials"
+}
+```
+
+#### GET /admin/me
+
+Valida el token con `auth-microservice` y devuelve el usuario administrador actual.
+
+Header requerido:
+
+```http
+Authorization: Bearer <token>
+```
+
+- `200 OK`
+
+```json
+{
+	"id": "a6b8f6f3-8d70-4f59-9f51-92f8a27ec0ba",
+	"email": "admin@example.com",
+	"name": "Admin User",
+	"is_active": true,
+	"is_admin": true
+}
+```
+
+- `401 Unauthorized` si falta el token o no se puede validar.
+- `403 Forbidden` si el usuario existe pero esta inactivo o no es admin.
 
 #### POST /auth/forgot-password
 
@@ -358,11 +396,32 @@ doctl kubernetes cluster kubeconfig save <CLUSTER_ID>
 | GET | `/readyz` | Readiness probe — verifica conexión a DB |
 | POST | `/auth/register` | Registro de usuario |
 | POST | `/auth/login` | Login y emisión de tokens JWT (access + refresh) |
+| POST | `/admin/login` | Login exclusivo para usuarios administradores |
+| GET | `/admin/me` | Datos del administrador autenticado |
 | POST | `/auth/forgot-password` | Inicia recuperación de contraseña (envía código por email) |
 | POST | `/auth/verify-code` | Verifica código de recuperación |
 | POST | `/auth/reset-password` | Completa cambio de contraseña |
 | GET | `/docs` | Swagger UI (auto-generado) |
 | GET | `/redoc` | ReDoc (auto-generado) |
+
+## Administradores
+
+En entornos existentes, aplicar primero la migracion SQL idempotente:
+
+```bash
+psql "$DATABASE_URL" -f scripts/add_is_admin_column.sql
+```
+
+Luego crear o promover el primer administrador:
+
+```bash
+export ADMIN_EMAIL=admin@example.com
+export ADMIN_PASSWORD='Correct-P4ssw0rd!'
+export ADMIN_NAME='Admin User'
+python scripts/seed_admin.py
+```
+
+Si el usuario ya existe, el script lo promueve a `is_admin=true` y asegura `is_active=true` sin cambiar su password.
 
 ## Tests
 
