@@ -10,6 +10,7 @@ same environment variables the application uses in production
 """
 
 import pytest
+import httpx
 from fastapi.testclient import TestClient
 
 from src.core.database import Base, engine
@@ -34,7 +35,17 @@ def mock_external_auth_service(monkeypatch):
             "refresh_expires_in": 86400,
         }
 
+    def _fake_validate_token(authorization: str, timeout: float = 5.0):
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token.startswith("token-for-"):
+            request = httpx.Request("GET", "http://external-auth.test/validate")
+            response = httpx.Response(401, request=request)
+            raise httpx.HTTPStatusError("Invalid token", request=request, response=response)
+
+        return {"status": "valid", "user_id": token.removeprefix("token-for-")}
+
     monkeypatch.setattr(auth_client, "issue_token", _fake_issue_token)
+    monkeypatch.setattr(auth_client, "validate_token", _fake_validate_token)
     yield
 
 @pytest.fixture(autouse=True)

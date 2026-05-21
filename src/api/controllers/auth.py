@@ -42,6 +42,22 @@ def login_user(user_in: UserLogin, db: Session):
 
     return token_response
 
+def login_admin(user_in: UserLogin, db: Session):
+    user = user_repo.get_user_by_email(db, email=user_in.email)
+    if (
+        not user
+        or not verify_password(user_in.password, user.password)
+        or not user.is_active
+        or not user.is_admin
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+    token_response = auth_client.issue_token(user_id=user.id)
+
+    return token_response
+
 def forgot_password(request: ForgotPasswordRequest, db: Session):
     user = user_repo.get_user_by_email(db=db, email=request.email)
     
