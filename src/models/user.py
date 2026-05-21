@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Uuid, Column, ForeignKey, String, Boolean, DateTime
+from sqlalchemy import Uuid, Column, ForeignKey, String, Boolean, DateTime, text
 from src.core.database import Base
 
 
@@ -11,6 +11,7 @@ class User(Base):
     password = Column(String, nullable=False)
     name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class VerificationCode(Base):
