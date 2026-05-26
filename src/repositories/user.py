@@ -68,3 +68,9 @@ def get_users_paginated(db: Session, skip: int, limit: int, search: str | None =
     users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
     
     return total, users
+
+def set_user_active_status(db: Session, user: User, is_active: bool) -> User:
+    user.is_active = is_active
+    db.commit()
+    db.refresh(user)
+    return user

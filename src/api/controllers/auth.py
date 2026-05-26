@@ -4,11 +4,13 @@ from src.schemas.user import UserCreate, UserLogin
 from src.repositories import user as user_repo
 from src.core.security import verify_password, get_password_hash
 from src.schemas.user import ForgotPasswordRequest, VerifyCodeRequest, ResetPasswordRequest
+from src.models.user import User
 import resend
 import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
 from src.services import auth_client, profile_client
+import uuid
 
 settings = get_settings()
 resend.api_key = settings.RESEND_API_KEY
@@ -134,3 +136,25 @@ def list_users(db: Session, page: int, size: int, search: str | None):
         "page": page,
         "size": size
     }
+
+def block_user(db: Session, user_id: uuid.UUID, current_admin: User):
+    if current_admin.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Un administrador no puede bloquearse a sí mismo.",
+        )
+    
+    target_user = user_repo.get_user_by_id(db, user_id)
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    
+    user_repo.set_user_active_status(db, target_user, is_active=False)
+    return {"message": "Usuario bloqueado correctamente"}
+
+def unblock_user(db: Session, user_id: uuid.UUID):
+    target_user = user_repo.get_user_by_id(db, user_id)
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    
+    user_repo.set_user_active_status(db, target_user, is_active=True)
+    return {"message": "Usuario desbloqueado correctamente"}
