@@ -3,6 +3,7 @@ from src.models.user import User, VerificationCode
 from datetime import datetime
 from src.schemas.user import UserCreate
 from src.core.security import get_password_hash
+from sqlalchemy import or_
 import uuid
 
 
@@ -50,3 +51,20 @@ def update_user_password(db: Session, user: User, hashed_pass: str):
 def delete_verification_code(db: Session, verification_code: VerificationCode):
     db.delete(verification_code)
     db.commit()
+
+def get_users_paginated(db: Session, skip: int, limit: int, search: str | None = None):
+    query = db.query(User)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                User.email.ilike(search_term),
+                User.name.ilike(search_term)
+            )
+        )
+    
+    total = query.count()
+    users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
+    
+    return total, users

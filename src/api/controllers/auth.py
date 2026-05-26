@@ -124,3 +124,13 @@ def reset_password(request: ResetPasswordRequest, db: Session):
     user_repo.delete_verification_code(db, db_code)
 
     return {"message": "Contraseña actualizada correctamente"}
+
+def list_users(db: Session, page: int, size: int, search: str | None):
+    skip = (page - 1) * size
+    total, users = user_repo.get_users_paginated(db, skip=skip, limit=size, search=search)
+    return {
+        "items": users,
+        "total": total,
+        "page": page,
+        "size": size
+    }

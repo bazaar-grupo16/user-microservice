@@ -1,7 +1,7 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, Query
 
 from src.core.dependencies import AdminUser, DbSession
-from src.schemas.user import AdminMeResponse, LoginResponse, UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, MessageResponse, VerifyCodeRequest, ResetPasswordRequest
+from src.schemas.user import AdminMeResponse, LoginResponse, UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, MessageResponse, VerifyCodeRequest, ResetPasswordRequest, PaginatedUserResponse
 from src.api.controllers import auth as auth_controller
 
 router = APIRouter(tags=["Auth"])
@@ -40,3 +40,13 @@ def verify_code(request: VerifyCodeRequest, db: DbSession):
 @router.post("/reset-password")
 def reset_password(request: ResetPasswordRequest, db: DbSession):
     return auth_controller.reset_password(request=request, db=db)
+
+@router.get("/admin/users", response_model=PaginatedUserResponse, status_code=status.HTTP_200_OK)
+def get_users(
+    admin_user: AdminUser,
+    db: DbSession,
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=1, le=100),
+    search: str | None = Query(None, min_length=1)
+):
+    return auth_controller.list_users(db=db, page=page, size=size, search=search)
