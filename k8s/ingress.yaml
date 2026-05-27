@@ -17,7 +17,7 @@ metadata:
     nginx.ingress.kubernetes.io/cors-allow-origin: "*"
 
     # Métodos HTTP permitidos.
-    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
 
     # Headers que el cliente puede enviar.
     nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type"
@@ -35,7 +35,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /(login|register|forgot-password|verify-code|reset-password|admin/login|admin/me)
+          - path: /(login|register|forgot-password|verify-code|reset-password|admin/login|admin/me|admin/users.*)
             pathType: ImplementationSpecific
             backend:
               service:
