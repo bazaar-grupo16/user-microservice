@@ -360,3 +360,55 @@ class TestPasswordRecovery:
 
         assert login_response.status_code == 401
         assert login_response.json() == {"detail": "Invalid credentials"}
+
+
+class TestAuthLogout:
+    def _create_user(
+        self,
+        email: str,
+        password: str = "Correct-P4ssw0rd!",
+        is_admin: bool = False,
+        is_active: bool = True,
+        name: str = "Test User",
+    ) -> User:
+        with SessionLocal() as db:
+            user = User(
+                id=uuid4(),
+                email=email,
+                password=get_password_hash(password),
+                name=name,
+                is_active=is_active,
+                is_admin=is_admin,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            db.expunge(user)
+            return user
+
+    def test_logout_returns_204_for_valid_token(self, client: TestClient) -> None:
+        user = self._create_user(email=f"logout-{uuid4().hex}@example.com")
+
+        response = client.delete("/logout", headers={"Authorization": f"Bearer token-for-{user.id}"})
+
+        assert response.status_code == 204
+
+    def test_logout_rejects_missing_token(self, client: TestClient) -> None:
+        response = client.delete("/logout")
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Could not validate credentials"}
+
+    def test_logout_rejects_invalid_token(self, client: TestClient) -> None:
+        response = client.delete("/logout", headers={"Authorization": "Bearer invalid-token"})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Could not validate credentials"}
+
+    def test_logout_rejects_inactive_user(self, client: TestClient) -> None:
+        user = self._create_user(email=f"logout-inactive-{uuid4().hex}@example.com", is_active=False)
+
+        response = client.delete("/logout", headers={"Authorization": f"Bearer token-for-{user.id}"})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Could not validate credentials"}

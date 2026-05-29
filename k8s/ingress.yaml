@@ -35,7 +35,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /(login|register|forgot-password|verify-code|reset-password|admin/login|admin/me|admin/users.*)
+          - path: /(login|logout|register|forgot-password|verify-code|reset-password|admin/login|admin/me|admin/users.*)
             pathType: ImplementationSpecific
             backend:
               service:
