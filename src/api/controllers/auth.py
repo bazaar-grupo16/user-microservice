@@ -46,7 +46,7 @@ def login_user(user_in: UserLogin, db: Session):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tu cuenta está suspendida. Por favor, contacta a soporte.",
         )
-    token_response = auth_client.issue_token(user_id=user.id)
+    token_response = auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
 
     return token_response
 
@@ -62,7 +62,7 @@ def login_admin(user_in: UserLogin, db: Session):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    token_response = auth_client.issue_token(user_id=user.id)
+    token_response = auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
 
     return token_response
 

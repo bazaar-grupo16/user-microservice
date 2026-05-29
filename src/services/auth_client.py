@@ -6,12 +6,12 @@ import httpx
 from src.core.config import get_settings
 
 
-def issue_token(user_id: UUID, timeout: float = 5.0) -> Dict[str, Any]:
+def issue_token(user_id: UUID, is_admin: bool, timeout: float = 5.0) -> Dict[str, Any]:
     """Call external auth service to issue a token for `user_id`.
 
     Expects the external service to expose `POST /token` accepting JSON
-    payload `{ "user_id": "<uuid>" }` and returning a JSON body with at
-    least `access_token` and `token_type`.
+    payload `{ "user_id": "<uuid>", "is_admin": <bool> }` and returning a
+    JSON body with at least `access_token` and `token_type`.
     """
     settings = get_settings()
     if not settings.AUTH_SERVICE_URL:
@@ -19,7 +19,7 @@ def issue_token(user_id: UUID, timeout: float = 5.0) -> Dict[str, Any]:
 
     url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/token"
 
-    resp = httpx.post(url, json={"user_id": str(user_id)}, timeout=timeout)
+    resp = httpx.post(url, json={"user_id": str(user_id), "is_admin": is_admin}, timeout=timeout)
     resp.raise_for_status()
     return resp.json()
 
