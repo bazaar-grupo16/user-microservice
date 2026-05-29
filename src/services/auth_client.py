@@ -35,3 +35,21 @@ def validate_token(authorization: str, timeout: float = 5.0) -> Dict[str, Any]:
     resp = httpx.get(url, headers={"Authorization": authorization}, timeout=timeout)
     resp.raise_for_status()
     return resp.json()
+
+
+def delete_token(user_id: UUID, timeout: float = 5.0) -> None:
+    """Revoke all tokens for a user at the external auth service (logout).
+    
+    Expects the external service to expose `DELETE /token` accepting JSON
+    payload `{ "user_id": "<uuid>" }` and returning 204 No Content.
+    """
+    settings = get_settings()
+    if not settings.AUTH_SERVICE_URL:
+        raise RuntimeError("AUTH_SERVICE_URL is not configured")
+
+    # Use a resource-style path so the DELETE request does not require a body.
+    # This avoids issues with clients/proxies that mishandle DELETE bodies.
+    url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/token/{str(user_id)}"
+
+    resp = httpx.delete(url, timeout=timeout)
+    resp.raise_for_status()

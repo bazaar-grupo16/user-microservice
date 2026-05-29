@@ -44,8 +44,12 @@ def mock_external_auth_service(monkeypatch):
 
         return {"status": "valid", "user_id": token.removeprefix("token-for-")}
 
+    def _fake_delete_token(user_id, timeout: float = 5.0):
+        return None
+
     monkeypatch.setattr(auth_client, "issue_token", _fake_issue_token)
     monkeypatch.setattr(auth_client, "validate_token", _fake_validate_token)
+    monkeypatch.setattr(auth_client, "delete_token", _fake_delete_token)
     yield
 
 @pytest.fixture(autouse=True)
