@@ -26,7 +26,7 @@ def mock_external_auth_service(monkeypatch):
     # Monkeypatch the auth_client.issue_token to return a deterministic token
     from src.services import auth_client
 
-    def _fake_issue_token(user_id, timeout: float = 5.0):
+    def _fake_issue_token(user_id, is_admin: bool = False, timeout: float = 5.0):
         return {
             "access_token": f"token-for-{user_id}",
             "refresh_token": f"refresh-token-for-{user_id}",
