@@ -4,6 +4,7 @@ from uuid import UUID
 import httpx
 
 from src.core.config import get_settings
+from src.core.observability import build_observability_headers
 
 
 def issue_token(user_id: UUID, is_admin: bool, timeout: float = 5.0) -> Dict[str, Any]:
@@ -19,7 +20,13 @@ def issue_token(user_id: UUID, is_admin: bool, timeout: float = 5.0) -> Dict[str
 
     url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/token"
 
-    resp = httpx.post(url, json={"user_id": str(user_id), "is_admin": is_admin}, timeout=timeout)
+    resp = httpx.post(
+        url,
+        json={"user_id": str(user_id), "is_admin": is_admin},
+        headers=build_observability_headers(),
+        timeout=timeout,
+    )
+
     resp.raise_for_status()
     return resp.json()
 
@@ -32,7 +39,11 @@ def validate_token(authorization: str, timeout: float = 5.0) -> Dict[str, Any]:
 
     url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/validate"
 
-    resp = httpx.get(url, headers={"Authorization": authorization}, timeout=timeout)
+    resp = httpx.get(
+        url,
+        headers={"Authorization": authorization, **build_observability_headers()},
+        timeout=timeout,
+    )
     resp.raise_for_status()
     return resp.json()
 
