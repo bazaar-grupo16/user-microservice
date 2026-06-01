@@ -32,7 +32,7 @@ def mock_external_auth_service(monkeypatch):
             "refresh_token": f"refresh-token-for-{user_id}",
             "token_type": "bearer",
             "expires_in": 3600,
-            "refresh_expires_in": 1209600,
+            "refresh_expires_in": 86400,
         }
 
     def _fake_validate_token(authorization: str, timeout: float = 5.0):

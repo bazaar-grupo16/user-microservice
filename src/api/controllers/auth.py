@@ -86,7 +86,7 @@ def forgot_password(request: ForgotPasswordRequest, db: Session):
 
     try:
         resend.Emails.send({
-            "from": "Bazaar App <onboarding@resend.dev>",
+            "from": "Bazaar App <no-reply@tomasbp.com>",
             "to": [user.email], 
             "subject": "Código de recuperación de contraseña",
             "html": f"""
@@ -97,7 +97,7 @@ def forgot_password(request: ForgotPasswordRequest, db: Session):
             """
         })
     except Exception:
-        raise HTTPException(status_code=500, detail="Error al intentar enviar el correo.")
+        raise HTTPException(status_code=500, detail="Error al intentar enviar el correo de recuperación")
 
     return success_message
 

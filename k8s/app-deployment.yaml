@@ -54,6 +54,11 @@ spec:
                 secretKeyRef:
                   name: user-db-credentials
                   key: DB_NAME
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: user-db-credentials
+                  key: RESEND_API_KEY
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4317"
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
