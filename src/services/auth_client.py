@@ -62,5 +62,5 @@ def delete_token(user_id: UUID, timeout: float = 5.0) -> None:
     # This avoids issues with clients/proxies that mishandle DELETE bodies.
     url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/token/{str(user_id)}"
 
-    resp = httpx.delete(url, timeout=timeout)
+    resp = httpx.delete(url, timeout=timeout, headers=build_observability_headers())
     resp.raise_for_status()
