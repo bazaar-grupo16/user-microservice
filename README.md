@@ -341,6 +341,46 @@ Body esperado:
 	]
 }
 ```
+#### DELETE /auth/logout
+
+Revoca todos los tokens activos del usuario (logout / cierre de sesión). Requiere un token válido en el header `Authorization`.
+
+Header requerido:
+
+```http
+Authorization: Bearer <token>
+```
+
+- `204 No Content` — Logout exitoso, no hay body en la respuesta.
+
+- Errores:
+	- `401 Unauthorized` si falta el token, el token es inválido, o el usuario está inactivo.
+
+```json
+{
+	"detail": "Could not validate credentials"
+}
+```
+#### DELETE /auth/logout
+
+Revoca todos los tokens activos del usuario (logout / cierre de sesión). Requiere un token válido en el header `Authorization`.
+
+Header requerido:
+
+```http
+Authorization: Bearer <token>
+```
+
+- `204 No Content` — Logout exitoso, no hay body en la respuesta.
+
+- Errores:
+	- `401 Unauthorized` si falta el token, el token es inválido, o el usuario está inactivo.
+
+```json
+{
+	"detail": "Could not validate credentials"
+}
+```
 
 ## Mapeo de Rutas
 Las rutas del microservicio se mapean al ambiente de kubernetes con pequeñas diferencias:

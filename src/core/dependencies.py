@@ -61,3 +61,35 @@ def require_admin(
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
+
+
+def require_user(
+    db: DbSession,
+    authorization: Annotated[str | None, Header()] = None,
+) -> User:
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+
+    try:
+        validation_response = auth_client.validate_token(authorization=authorization)
+        user_id = UUID(str(validation_response["user_id"]))
+    except (httpx.HTTPError, KeyError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+
+    user = user_repo.get_user_by_id(db=db, user_id=user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
+
+    return user
+
+
+AuthenticatedUser = Annotated[User, Depends(require_user)]
