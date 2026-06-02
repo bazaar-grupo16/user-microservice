@@ -9,9 +9,12 @@ same environment variables the application uses in production
 **No mocking is used.**
 """
 
+from pathlib import Path
+
 import pytest
 import httpx
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from src.core.database import Base, engine
 from src.main import app
@@ -70,10 +73,19 @@ def mock_profile_service(monkeypatch):
     monkeypatch.setattr(profile_client, "create_profile", _fake_create_profile)
     yield
 
+def _apply_metrics_indexes() -> None:
+    sql_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "add_users_created_at_index.sql"
+    )
+    with engine.begin() as conn:
+        conn.execute(text(sql_path.read_text()))
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _setup_database():
     """Create all tables before the session and tear them down after."""
     Base.metadata.create_all(bind=engine)
+    _apply_metrics_indexes()
     yield
     Base.metadata.drop_all(bind=engine)
 

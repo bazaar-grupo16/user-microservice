@@ -10,8 +10,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source and tests.
+# Copy application source, SQL scripts, and tests.
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 COPY tests/ ./tests/
 
 CMD ["pytest", "tests/", "-v", "--tb=short"]

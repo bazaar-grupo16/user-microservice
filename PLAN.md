@@ -6,7 +6,7 @@
 **Workflow:** Complete one task → run tests → commit → mark `[x]` here → **wait for approval** before the next task.
 
 - [x] **Task 0** — `PLAN.md` + docs commit
-- [ ] **Task 1** — DB index (`scripts/add_users_created_at_index.sql`, `conftest.py`)
+- [x] **Task 1** — DB index (`scripts/add_users_created_at_index.sql`, `conftest.py`)
 - [ ] **Task 2** — `src/schemas/metrics.py`
 - [ ] **Task 3** — `src/repositories/metrics.py`
 - [ ] **Task 4** — `src/services/metrics.py`
