@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response
+from pydantic import ValidationError
 
 from src.core.dependencies import AdminUser, DbSession
 from src.schemas.metrics import MetricsDateRangeParams, MetricsInterval, UsersMetricResponse
@@ -15,7 +17,10 @@ def get_metrics_date_range(
     start_date: datetime = Query(...),
     end_date: datetime = Query(...),
 ) -> MetricsDateRangeParams:
-    return MetricsDateRangeParams(start_date=start_date, end_date=end_date)
+    try:
+        return MetricsDateRangeParams(start_date=start_date, end_date=end_date)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
 
 
 MetricsDateRange = Annotated[MetricsDateRangeParams, Depends(get_metrics_date_range)]
