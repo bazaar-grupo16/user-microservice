@@ -382,10 +382,82 @@ Authorization: Bearer <token>
 }
 ```
 
+### Métricas (admin)
+
+Endpoints analíticos para el backoffice. Requieren token de administrador (`Authorization: Bearer <token>`).
+
+**Prefijo de gateway:** las rutas públicas usan el prefijo `/users` para distinguirse de métricas de otros microservicios (ej. órdenes). El API Gateway enruta `/users/admin/metrics/*` hacia este servicio; no se modifica el ingress de este repositorio.
+
+**Regla de conteo:** se incluyen todos los usuarios registrados (`is_active` true o false) excepto cuentas con `is_admin=true`.
+
+**Validación de fechas:** `start_date` y `end_date` son obligatorios (`date-time`, UTC). El rango máximo permitido es **6 meses calendario**. `end_date` debe ser mayor o igual a `start_date`.
+
+En entornos existentes, aplicar el índice de performance:
+
+```bash
+psql "$DATABASE_URL" -f scripts/add_users_created_at_index.sql
+```
+
+#### GET /users/admin/metrics/users
+
+Retorna resumen y serie temporal de registros de usuarios.
+
+Query params:
+
+| Parámetro | Requerido | Descripción |
+|-----------|-----------|-------------|
+| `start_date` | sí | Inicio del período (inclusive) |
+| `end_date` | sí | Fin del período (inclusive) |
+| `interval` | no | `day` (default), `week` o `month` |
+
+- `200 OK`
+
+```json
+{
+	"summary": {
+		"total_registered_all_time": 120,
+		"new_users_in_period": 15
+	},
+	"timeseries": [
+		{ "date": "2026-01-01", "count": 3 },
+		{ "date": "2026-01-02", "count": 0 }
+	]
+}
+```
+
+- Errores:
+	- `401 Unauthorized` / `403 Forbidden` si el token falta, es inválido o el usuario no es admin.
+	- `422 Unprocessable Entity` si las fechas son inválidas o el rango supera 6 meses.
+
+#### GET /users/admin/metrics/users/export
+
+Exporta métricas del período en CSV (buckets diarios + filas de resumen).
+
+Query params: `start_date`, `end_date` (mismas reglas que arriba).
+
+- `200 OK` — `Content-Type: text/csv`, descarga inmediata.
+
+Ejemplo de contenido:
+
+```csv
+metric,value
+total_registered_all_time,120
+new_users_in_period,15
+
+date,new_users
+2026-01-01,3
+2026-01-02,0
+```
+
+- Errores:
+	- `401 Unauthorized` / `403 Forbidden` si no hay admin autenticado.
+	- `422 Unprocessable Entity` si faltan fechas o el rango es inválido.
+
 ## Mapeo de Rutas
 Las rutas del microservicio se mapean al ambiente de kubernetes con pequeñas diferencias:
 * `/auth/login` -> `/login`
 * `/auth/register` -> `/register`
+* `/users/admin/metrics/*` -> `/users/admin/metrics/*` (vía API Gateway)
 * `/livez` -> `/livez`
 * `/readyz` -> `/readyz`
 
@@ -438,6 +510,8 @@ doctl kubernetes cluster kubeconfig save <CLUSTER_ID>
 | POST | `/auth/login` | Login y emisión de tokens JWT (access + refresh) |
 | POST | `/admin/login` | Login exclusivo para usuarios administradores |
 | GET | `/admin/me` | Datos del administrador autenticado |
+| GET | `/users/admin/metrics/users` | Métricas de usuarios (resumen + serie temporal) |
+| GET | `/users/admin/metrics/users/export` | Exportar métricas de usuarios a CSV |
 | POST | `/auth/forgot-password` | Inicia recuperación de contraseña (envía código por email) |
 | POST | `/auth/verify-code` | Verifica código de recuperación |
 | POST | `/auth/reset-password` | Completa cambio de contraseña |
