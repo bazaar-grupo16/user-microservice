@@ -155,6 +155,7 @@ def block_user(db: Session, user_id: uuid.UUID, current_admin: User):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
     
     user_repo.set_user_active_status(db, target_user, is_active=False)
+    auth_client.delete_token(user_id=target_user.id)
     return {"message": "Usuario bloqueado correctamente"}
 
 def unblock_user(db: Session, user_id: uuid.UUID):
