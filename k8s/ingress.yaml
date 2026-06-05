@@ -35,6 +35,13 @@ spec:
   rules:
     - http:
         paths:
+          - path: /(users/admin/metrics/users(/export)?)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80
           - path: /(login|logout|register|forgot-password|verify-code|reset-password|admin/login|admin/me|admin/users.*)
             pathType: ImplementationSpecific
             backend:
