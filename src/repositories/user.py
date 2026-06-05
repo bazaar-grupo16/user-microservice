@@ -74,3 +74,7 @@ def set_user_active_status(db: Session, user: User, is_active: bool) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+def delete_user(db: Session, user: User):
+    db.delete(user)
+    db.commit()

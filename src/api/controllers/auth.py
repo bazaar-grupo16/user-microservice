@@ -25,10 +25,18 @@ def register_user(user_in: UserCreate, db: Session):
         )
     new_user = user_repo.create_user(db, user_in=user_in)
 
-    profile_client.create_profile(
-        user_id=str(new_user.id),
-        name=user_in.name
-    )
+    try:
+        profile_client.create_profile(
+            user_id=str(new_user.id),
+            name=user_in.name
+        )
+    except Exception:
+        user_repo.delete_user(db, user=new_user)
+    
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="El servicio de perfiles no responde. Se revirtió la creación de la cuenta."
+        )
 
     return new_user
 
