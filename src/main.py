@@ -15,6 +15,7 @@ from fastapi import FastAPI
 
 from src.api.health import router as health_router
 from src.api.routers.auth import router as auth_router
+from src.api.routers.metrics import router as admin_metrics_router
 from src.core.config import get_settings
 from src.core.database import Base, engine, wait_for_db
 from src.core.logging import setup_logging
@@ -52,4 +53,5 @@ app.add_middleware(CorrelationIdMiddleware)
 # ── Routers ──────────────────────────────────────────
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(admin_metrics_router)
 app.include_router(metrics_router)
