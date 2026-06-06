@@ -24,9 +24,9 @@ def _add_calendar_months(dt: datetime, months: int) -> datetime:
 
 def _ensure_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
+        # Assume naive datetimes are already UTC (DB stores `created_at` without tzinfo).
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 class MetricsDateRangeParams(BaseModel):
     start_date: datetime
