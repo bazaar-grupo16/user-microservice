@@ -386,7 +386,7 @@ Authorization: Bearer <token>
 
 Endpoints analíticos para el backoffice. Requieren token de administrador (`Authorization: Bearer <token>`).
 
-**Prefijo de gateway:** las rutas públicas usan el prefijo `/users` para distinguirse de métricas de otros microservicios (ej. órdenes). El API Gateway enruta `/users/admin/metrics/*` hacia este servicio; no se modifica el ingress de este repositorio.
+**Prefijo de gateway:** las rutas públicas usan el prefijo `/users` para distinguirse de métricas de otros microservicios (ej. órdenes). El API Gateway enruta `/users/admin/metrics/*` hacia este servicio; este repositorio también incluye reglas de ingress para soportar esas rutas en Kubernetes.
 
 **Regla de conteo:** se incluyen todos los usuarios registrados (`is_active` true o false) excepto cuentas con `is_admin=true`.
 
