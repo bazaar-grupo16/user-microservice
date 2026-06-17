@@ -52,6 +52,25 @@ def delete_verification_code(db: Session, verification_code: VerificationCode):
     db.delete(verification_code)
     db.commit()
 
+
+def get_user_by_google_id(db: Session, google_id: str) -> User | None:
+    return db.query(User).filter(User.google_id == google_id).first()
+
+
+def create_oauth_user(db: Session, email: str, name: str | None, google_id: str) -> User:
+    new_user = User(id=uuid.uuid4(), email=email, name=name, google_id=google_id)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
+def link_google_account(db: Session, user: User, google_id: str) -> User:
+    user.google_id = google_id
+    db.commit()
+    db.refresh(user)
+    return user
+
 def get_users_paginated(db: Session, skip: int, limit: int, search: str | None = None):
     query = db.query(User)
     

@@ -56,6 +56,19 @@ def mock_external_auth_service(monkeypatch):
     yield
 
 @pytest.fixture(autouse=True)
+def mock_google_service(monkeypatch):
+    import google.oauth2.id_token
+
+    def _fake_verify(token, request, audience):
+        if token == "valid-google-token":
+            return {"sub": "google-sub-123", "email": "googleuser@gmail.com", "name": "Google User", "email_verified": True}
+        raise ValueError("Invalid token")
+
+    monkeypatch.setattr(google.oauth2.id_token, "verify_oauth2_token", _fake_verify)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def mock_profile_service(monkeypatch):
     """Mockea nuestro propio cliente de perfiles durante los tests."""
     

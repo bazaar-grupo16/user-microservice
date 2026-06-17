@@ -14,6 +14,87 @@ from src.core.security import get_password_hash
 from src.models.user import User, VerificationCode
 
 
+class TestGoogleLogin:
+    def _stub_google(self, monkeypatch, email: str, google_id: str, name: str = "Google User"):
+        import google.oauth2.id_token
+        monkeypatch.setattr(
+            google.oauth2.id_token,
+            "verify_oauth2_token",
+            lambda token, *_: {"sub": google_id, "email": email, "name": name, "email_verified": True},
+        )
+
+    def test_new_user_is_created_and_returns_tokens(self, client: TestClient, monkeypatch) -> None:
+        email = f"new-google-{uuid4().hex}@gmail.com"
+        google_id = f"google-sub-{uuid4().hex}"
+        self._stub_google(monkeypatch, email=email, google_id=google_id)
+
+        response = client.post("/login/google", json={"google_id_token": "any-token"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert isinstance(body["access_token"], str)
+        assert isinstance(body["refresh_token"], str)
+        assert body["token_type"] == "bearer"
+
+        with SessionLocal() as db:
+            user = db.query(User).filter(User.email == email).first()
+            assert user is not None
+            assert user.google_id == google_id
+            assert user.password is None
+
+    def test_existing_password_account_is_linked(self, client: TestClient, monkeypatch) -> None:
+        email = f"link-{uuid4().hex}@gmail.com"
+        google_id = f"google-sub-{uuid4().hex}"
+
+        with SessionLocal() as db:
+            existing = User(
+                id=uuid4(),
+                email=email,
+                password=get_password_hash("Correct-P4ssw0rd!"),
+                name="Existing User",
+            )
+            db.add(existing)
+            db.commit()
+            existing_id = existing.id
+
+        self._stub_google(monkeypatch, email=email, google_id=google_id)
+        response = client.post("/login/google", json={"google_id_token": "any-token"})
+
+        assert response.status_code == 200
+
+        with SessionLocal() as db:
+            user = db.query(User).filter(User.id == existing_id).first()
+            assert user.google_id == google_id
+            assert user.password is not None  # original password preserved
+
+    def test_returning_google_user_gets_tokens(self, client: TestClient, monkeypatch) -> None:
+        email = f"returning-{uuid4().hex}@gmail.com"
+        google_id = f"google-sub-{uuid4().hex}"
+
+        with SessionLocal() as db:
+            returning = User(id=uuid4(), email=email, google_id=google_id, name="Returning User")
+            db.add(returning)
+            db.commit()
+
+        self._stub_google(monkeypatch, email=email, google_id=google_id)
+        response = client.post("/login/google", json={"google_id_token": "any-token"})
+
+        assert response.status_code == 200
+        assert isinstance(response.json()["access_token"], str)
+
+    def test_invalid_token_returns_401(self, client: TestClient) -> None:
+        # autouse mock_google_service raises HTTPStatusError for any token != "valid-google-token"
+        response = client.post("/login/google", json={"google_id_token": "bad-token"})
+
+        assert response.status_code == 401
+        assert response.json() == {"detail": "Invalid Google ID token"}
+
+    def test_missing_field_returns_422(self, client: TestClient) -> None:
+        response = client.post("/login/google", json={})
+
+        assert response.status_code == 422
+
+
 class TestAuthRegister:
     def _payload(self, email: str) -> dict[str, str | None]:
         return {

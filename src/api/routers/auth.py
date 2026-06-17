@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status, Query
 
 from src.core.dependencies import AdminUser, DbSession, AuthenticatedUser
-from src.schemas.user import AdminMeResponse, LoginResponse, UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, MessageResponse, VerifyCodeRequest, ResetPasswordRequest, PaginatedUserResponse
+from src.schemas.user import AdminMeResponse, LoginResponse, UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, MessageResponse, VerifyCodeRequest, ResetPasswordRequest, PaginatedUserResponse, GoogleLoginRequest
 from src.api.controllers import auth as auth_controller
 import uuid
 
@@ -41,6 +41,11 @@ def verify_code(request: VerifyCodeRequest, db: DbSession):
 @router.post("/reset-password")
 def reset_password(request: ResetPasswordRequest, db: DbSession):
     return auth_controller.reset_password(request=request, db=db)
+
+
+@router.post("/login/google", response_model=LoginResponse, status_code=status.HTTP_200_OK)
+def login_google(request: GoogleLoginRequest, db: DbSession):
+    return auth_controller.login_with_google(request=request, db=db)
 
 
 @router.delete("/logout", status_code=status.HTTP_204_NO_CONTENT)
