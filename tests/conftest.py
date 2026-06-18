@@ -57,14 +57,14 @@ def mock_external_auth_service(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def mock_google_service(monkeypatch):
-    import google.oauth2.id_token
+    from src.services import google_client
 
-    def _fake_verify(token, request, audience):
+    def _fake_verify_id_token(token: str):
         if token == "valid-google-token":
             return {"sub": "google-sub-123", "email": "googleuser@gmail.com", "name": "Google User", "email_verified": True}
         raise ValueError("Invalid token")
 
-    monkeypatch.setattr(google.oauth2.id_token, "verify_oauth2_token", _fake_verify)
+    monkeypatch.setattr(google_client, "verify_id_token", _fake_verify_id_token)
     yield
 
 

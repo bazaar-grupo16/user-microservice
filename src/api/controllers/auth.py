@@ -9,10 +9,8 @@ import resend
 import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
-from src.services import auth_client, profile_client
+from src.services import auth_client, profile_client, google_client
 import uuid
-from google.oauth2 import id_token as google_id_token
-from google.auth.transport import requests as google_requests
 
 settings = get_settings()
 resend.api_key = settings.RESEND_API_KEY
@@ -174,17 +172,8 @@ def logout_user(user: object) -> None:
 
 
 def login_with_google(request: GoogleLoginRequest, db: Session):
-    settings = get_settings()
-    if not settings.GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="GOOGLE_CLIENT_ID is not configured")
-
-    # Verify the provided token as an ID token for this app.
     try:
-        idinfo = google_id_token.verify_oauth2_token(
-            request.google_id_token,
-            google_requests.Request(),
-            settings.GOOGLE_CLIENT_ID,
-        )
+        idinfo = google_client.verify_id_token(request.google_id_token)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google ID token")
     except Exception:

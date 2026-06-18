@@ -16,11 +16,11 @@ from src.models.user import User, VerificationCode
 
 class TestGoogleLogin:
     def _stub_google(self, monkeypatch, email: str, google_id: str, name: str = "Google User"):
-        import google.oauth2.id_token
+        from src.services import google_client
         monkeypatch.setattr(
-            google.oauth2.id_token,
-            "verify_oauth2_token",
-            lambda token, *_: {"sub": google_id, "email": email, "name": name, "email_verified": True},
+            google_client,
+            "verify_id_token",
+            lambda token: {"sub": google_id, "email": email, "name": name, "email_verified": True},
         )
 
     def test_new_user_is_created_and_returns_tokens(self, client: TestClient, monkeypatch) -> None:
