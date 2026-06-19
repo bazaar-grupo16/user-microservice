@@ -42,7 +42,7 @@ spec:
                 name: user-service
                 port:
                   number: 80
-          - path: /(login|logout|register|forgot-password|verify-code|reset-password|admin/login|admin/me|admin/users.*)
+          - path: /(login/google|login|logout|register|forgot-password|verify-code|reset-password|admin/login|admin/me|admin/users.*)
             pathType: ImplementationSpecific
             backend:
               service:

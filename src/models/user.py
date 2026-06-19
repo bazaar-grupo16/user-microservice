@@ -8,7 +8,8 @@ class User(Base):
 
     id = Column(Uuid, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
-    password = Column(String, nullable=False)
+    password = Column(String, nullable=True)
+    google_id = Column(String, unique=True, nullable=True, index=True)
     name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, nullable=False, default=False, server_default=text("false"))

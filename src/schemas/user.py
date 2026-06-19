@@ -71,6 +71,10 @@ class VerifyCodeRequest(BaseModel):
     email: EmailStr
     code: str
 
+class GoogleLoginRequest(BaseModel):
+    google_id_token: str
+
+
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
     code: str

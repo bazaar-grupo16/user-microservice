@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from src.schemas.user import UserCreate, UserLogin
+from src.schemas.user import UserCreate, UserLogin, GoogleLoginRequest
 from src.repositories import user as user_repo
 from src.core.security import verify_password, get_password_hash
 from src.schemas.user import ForgotPasswordRequest, VerifyCodeRequest, ResetPasswordRequest
@@ -9,7 +9,7 @@ import resend
 import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
-from src.services import auth_client, profile_client
+from src.services import auth_client, profile_client, google_client
 import uuid
 
 settings = get_settings()
@@ -178,3 +178,34 @@ def unblock_user(db: Session, user_id: uuid.UUID):
 def logout_user(user: object) -> None:
     """Logout a user by revoking their tokens at the auth service."""
     auth_client.delete_token(user_id=user.id)
+
+
+def login_with_google(request: GoogleLoginRequest, db: Session):
+    try:
+        idinfo = google_client.verify_id_token(request.google_id_token)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google ID token")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Error verifying Google ID token")
+
+    # Verified ID token — take values from idinfo.
+    google_id: str = idinfo.get("sub")
+    email: str = idinfo.get("email")
+    name: str | None = idinfo.get("name")
+    email_verified = idinfo.get("email_verified")
+    if not google_id or not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google ID token missing required claims")
+    if email_verified is False:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google account email not verified")
+
+    user = user_repo.get_user_by_google_id(db, google_id=google_id)
+
+    if user is None:
+        user = user_repo.get_user_by_email(db, email=email)
+        if user is not None:
+            user_repo.link_google_account(db, user=user, google_id=google_id)
+        else:
+            user = user_repo.create_oauth_user(db, email=email, name=name, google_id=google_id)
+            profile_client.create_profile(user_id=str(user.id), name=name or "")
+
+    return auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
