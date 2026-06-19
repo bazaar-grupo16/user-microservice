@@ -199,4 +199,4 @@ def login_with_google(request: GoogleLoginRequest, db: Session):
             user = user_repo.create_oauth_user(db, email=email, name=name, google_id=google_id)
             profile_client.create_profile(user_id=str(user.id), name=name or "")
 
-    return auth_client.issue_token(user_id=user.id)
+    return auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
