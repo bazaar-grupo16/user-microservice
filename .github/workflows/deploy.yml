@@ -132,9 +132,10 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_NAME: ${{ secrets.DB_NAME }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: |
           sudo apt-get install -y gettext-base
           for f in k8s/*.yaml; do
-            envsubst '${IMAGE_NAME} ${IMAGE_TAG} ${DB_USER} ${DB_PASSWORD} ${DB_NAME} ${RESEND_API_KEY}' \
+            envsubst '${IMAGE_NAME} ${IMAGE_TAG} ${DB_USER} ${DB_PASSWORD} ${DB_NAME} ${RESEND_API_KEY} ${GOOGLE_CLIENT_ID}' \
               < "$f" | kubectl apply -f - -n bazaar-dev
           done
