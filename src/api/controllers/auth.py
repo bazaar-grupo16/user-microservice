@@ -10,7 +10,10 @@ import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
 from src.services import auth_client, profile_client, google_client
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 resend.api_key = settings.RESEND_API_KEY
@@ -174,9 +177,15 @@ def logout_user(user: object) -> None:
 def login_with_google(request: GoogleLoginRequest, db: Session):
     try:
         idinfo = google_client.verify_id_token(request.google_id_token)
-    except ValueError:
+    except ValueError as exc:
+        logger.warning(
+            "Google ID token verification failed (expected aud=%s): %s",
+            settings.GOOGLE_CLIENT_ID,
+            exc,
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Google ID token")
     except Exception:
+        logger.exception("Unexpected error verifying Google ID token")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Error verifying Google ID token")
 
     # Verified ID token — take values from idinfo.
