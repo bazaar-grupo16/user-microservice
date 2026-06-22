@@ -68,4 +68,4 @@ async def block_user(user_id: uuid.UUID, admin_user: AdminUser, db: DbSession):
 
 @router.patch("/admin/users/{user_id}/unblock", response_model=MessageResponse, status_code=status.HTTP_200_OK)
 async def unblock_user(user_id: uuid.UUID, admin_user: AdminUser, db: DbSession):
-    return await auth_controller.unblock_user(db=db, user_id=user_id)
+    return await auth_controller.unblock_user(db=db, user_id=user_id, current_admin=admin_user)

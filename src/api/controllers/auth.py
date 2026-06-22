@@ -10,7 +10,7 @@ import resend
 import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
-from src.services import auth_client, profile_client, google_client
+from src.services import auth_client, profile_client, google_client, catalog_client
 import logging
 import uuid
 
@@ -164,15 +164,22 @@ async def block_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
     await user_repo.set_user_active_status(db, target_user, is_active=False)
-    return {"message": "Usuario bloqueado correctamente"}
+    
+    
+    await catalog_client.block_seller_products(str(user_id), str(current_admin.id))
+    
+    return {"message": "Usuario y productos bloqueados correctamente"}
 
-async def unblock_user(db: AsyncSession, user_id: uuid.UUID):
+async def unblock_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User):
     target_user = await user_repo.get_user_by_id(db, user_id)
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
     await user_repo.set_user_active_status(db, target_user, is_active=True)
-    return {"message": "Usuario desbloqueado correctamente"}
+    
+    await catalog_client.unblock_seller_products(str(user_id), str(current_admin.id))
+    
+    return {"message": "Usuario y productos desbloqueados correctamente"}
 
 
 async def logout_user(user: object) -> None:
