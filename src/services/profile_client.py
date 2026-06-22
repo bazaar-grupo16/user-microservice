@@ -5,7 +5,7 @@ from src.core.config import get_settings
 from src.core.observability import build_observability_headers
 
 
-def create_profile(user_id: str, name: str) -> dict:
+async def create_profile(user_id: str, name: str) -> dict:
     """
     Envía una petición al microservicio de Perfiles para crear el perfil
     asociado a un nuevo usuario.
@@ -19,14 +19,14 @@ def create_profile(user_id: str, name: str) -> dict:
     }
 
     try:
-        with httpx.Client() as client:
-            response = client.post(
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
                 profile_url,
                 json=profile_payload,
                 headers=build_observability_headers(),
                 timeout=5.0,
             )
-            response.raise_for_status() 
+            response.raise_for_status()
             
             # Si la API de perfil devuelve JSON, lo retornamos (opcional pero útil)
             return response.json() if response.text else {}

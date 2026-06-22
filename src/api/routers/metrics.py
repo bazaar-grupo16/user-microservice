@@ -27,13 +27,13 @@ MetricsDateRange = Annotated[MetricsDateRangeParams, Depends(get_metrics_date_ra
 
 
 @router.get("/users", response_model=UsersMetricResponse)
-def get_users_metrics(
+async def get_users_metrics(
     _admin_user: AdminUser,
     db: DbSession,
     date_range: MetricsDateRange,
     interval: MetricsInterval = Query(default=MetricsInterval.day),
 ):
-    return metrics_service.get_users_metrics(
+    return await metrics_service.get_users_metrics(
         db=db,
         start=date_range.start_date,
         end=date_range.end_date,
@@ -42,12 +42,12 @@ def get_users_metrics(
 
 
 @router.get("/users/export")
-def export_users_metrics(
+async def export_users_metrics(
     _admin_user: AdminUser,
     db: DbSession,
     date_range: MetricsDateRange,
 ):
-    csv_body, filename = metrics_service.build_users_metrics_csv(
+    csv_body, filename = await metrics_service.build_users_metrics_csv(
         db=db,
         start=date_range.start_date,
         end=date_range.end_date,

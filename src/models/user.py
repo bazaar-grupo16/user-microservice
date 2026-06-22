@@ -13,7 +13,7 @@ class User(Base):
     name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, nullable=False, default=False, server_default=text("false"))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 class VerificationCode(Base):
     __tablename__ = "verification_codes"
