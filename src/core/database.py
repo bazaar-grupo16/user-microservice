@@ -5,11 +5,19 @@ The connection string is built from environment variables via
 :pymod:`src.core.config` — no credentials appear in this file.
 """
 
+import asyncio
 import logging
+import os
 import time
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from src.core.config import get_settings
 
@@ -17,15 +25,26 @@ from src.core.config import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-engine = create_engine(
+# Tests drive the async app with Starlette's sync TestClient, which uses a
+# fresh event loop per request.  A shared connection pool would reuse a
+# connection bound to a closed loop, so tests set DB_USE_NULL_POOL=1 to opt
+# into NullPool (no cross-loop connection reuse).  Production keeps pooling.
+if os.getenv("DB_USE_NULL_POOL") == "1":
+    _engine_kwargs: dict = {"poolclass": NullPool}
+else:
+    _engine_kwargs = {"pool_pre_ping": True}
+
+engine = create_async_engine(
     settings.database_url,
-    pool_pre_ping=True,
+    **_engine_kwargs,
 )
 
-SessionLocal = sessionmaker(
+SessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
     autocommit=False,
     autoflush=False,
-    bind=engine,
+    expire_on_commit=False,
 )
 
 
@@ -33,7 +52,7 @@ class Base(DeclarativeBase):
     """Declarative base class for all ORM models."""
 
 
-def check_db_connection() -> bool:
+async def check_db_connection() -> bool:
     """
     Attempt a lightweight query against the database.
 
@@ -43,8 +62,8 @@ def check_db_connection() -> bool:
         ``True`` if the database is reachable, ``False`` otherwise.
     """
     try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
         return True
     except Exception:
         return False
@@ -57,7 +76,7 @@ _DB_MAX_WAIT: float = 30.0  # ceiling for a single sleep interval
 _DB_TIMEOUT: float = 300.0  # total budget — give up after this many seconds
 
 
-def wait_for_db() -> None:
+async def wait_for_db() -> None:
     """
     Block until the database is reachable or the retry budget is exhausted.
 
@@ -78,7 +97,7 @@ def wait_for_db() -> None:
 
     while True:
         attempt += 1
-        if check_db_connection():
+        if await check_db_connection():
             logger.info("Database is reachable (attempt %d).", attempt)
             return
 
@@ -97,5 +116,5 @@ def wait_for_db() -> None:
             sleep_for,
             remaining,
         )
-        time.sleep(sleep_for)
+        await asyncio.sleep(sleep_for)
         wait = min(wait * _DB_BACKOFF_FACTOR, _DB_MAX_WAIT)

@@ -1,5 +1,6 @@
 """Integration tests for admin user metrics endpoints."""
 
+import asyncio
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -23,28 +24,39 @@ class TestUsersMetrics:
         is_active: bool = True,
         email: str | None = None,
     ) -> User:
-        with SessionLocal() as db:
-            user = User(
-                id=uuid4(),
-                email=email or f"metrics-{uuid4().hex}@example.com",
-                password=get_password_hash("Correct-P4ssw0rd!"),
-                name="Metrics Test User",
-                is_active=is_active,
-                is_admin=is_admin,
-                created_at=created_at,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            db.expunge(user)
-            return user
+        # ``created_at`` is a naive (UTC) timestamp column; asyncpg rejects
+        # tz-aware values, so normalise the test fixtures to naive UTC.
+        if created_at.tzinfo is not None:
+            created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
+        user = User(
+            id=uuid4(),
+            email=email or f"metrics-{uuid4().hex}@example.com",
+            password=get_password_hash("Correct-P4ssw0rd!"),
+            name="Metrics Test User",
+            is_active=is_active,
+            is_admin=is_admin,
+            created_at=created_at,
+        )
+
+        async def _do() -> User:
+            async with SessionLocal() as db:
+                db.add(user)
+                await db.commit()
+                await db.refresh(user)
+                db.expunge(user)
+                return user
+
+        return asyncio.run(_do())
 
     def _admin_headers(self, admin: User) -> dict[str, str]:
         return {"Authorization": f"Bearer token-for-{admin.id}"}
 
     def _baseline_total(self) -> int:
-        with SessionLocal() as db:
-            return metrics_repo.count_total_registered(db)
+        async def _do() -> int:
+            async with SessionLocal() as db:
+                return await metrics_repo.count_total_registered(db)
+
+        return asyncio.run(_do())
 
     def test_metrics_returns_200_for_admin(self, client: TestClient) -> None:
         admin = self._create_user(

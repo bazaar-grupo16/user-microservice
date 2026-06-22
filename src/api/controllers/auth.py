@@ -1,10 +1,11 @@
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.schemas.user import UserCreate, UserLogin, GoogleLoginRequest
 from src.repositories import user as user_repo
 from src.core.security import verify_password, get_password_hash
 from src.schemas.user import ForgotPasswordRequest, VerifyCodeRequest, ResetPasswordRequest
 from src.models.user import User
+import asyncio
 import resend
 import random
 from datetime import datetime, timedelta
@@ -18,17 +19,17 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 resend.api_key = settings.RESEND_API_KEY
 
-def register_user(user_in: UserCreate, db: Session):
+async def register_user(user_in: UserCreate, db: AsyncSession):
 
-    existing_user = user_repo.get_user_by_email(db, email=user_in.email)
+    existing_user = await user_repo.get_user_by_email(db, email=user_in.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User with this email already exists",
         )
-    new_user = user_repo.create_user(db, user_in=user_in)
+    new_user = await user_repo.create_user(db, user_in=user_in)
 
-    profile_client.create_profile(
+    await profile_client.create_profile(
         user_id=str(new_user.id),
         name=user_in.name
     )
@@ -36,8 +37,8 @@ def register_user(user_in: UserCreate, db: Session):
     return new_user
 
 
-def login_user(user_in: UserLogin, db: Session):
-    user = user_repo.get_user_by_email(db, email=user_in.email)
+async def login_user(user_in: UserLogin, db: AsyncSession):
+    user = await user_repo.get_user_by_email(db, email=user_in.email)
     if not user or not verify_password(user_in.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -49,12 +50,12 @@ def login_user(user_in: UserLogin, db: Session):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tu cuenta está suspendida. Por favor, contacta a soporte.",
         )
-    token_response = auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
+    token_response = await auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
 
     return token_response
 
-def login_admin(user_in: UserLogin, db: Session):
-    user = user_repo.get_user_by_email(db, email=user_in.email)
+async def login_admin(user_in: UserLogin, db: AsyncSession):
+    user = await user_repo.get_user_by_email(db, email=user_in.email)
     if (
         not user
         or not verify_password(user_in.password, user.password)
@@ -65,12 +66,12 @@ def login_admin(user_in: UserLogin, db: Session):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    token_response = auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
+    token_response = await auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
 
     return token_response
 
-def forgot_password(request: ForgotPasswordRequest, db: Session):
-    user = user_repo.get_user_by_email(db=db, email=request.email)
+async def forgot_password(request: ForgotPasswordRequest, db: AsyncSession):
+    user = await user_repo.get_user_by_email(db=db, email=request.email)
     
     success_message = {"message": "Si el email está registrado, te enviaremos un código."}
     
@@ -80,65 +81,70 @@ def forgot_password(request: ForgotPasswordRequest, db: Session):
     codigo = str(random.randint(100000, 999999))
     expires_at = datetime.utcnow() + timedelta(minutes=15)
 
-    user_repo.create_verification_code(
+    await user_repo.create_verification_code(
         db=db,
-        user_id=user.id, 
-        code=codigo, 
+        user_id=user.id,
+        code=codigo,
         expires_at=expires_at
     )
 
     try:
-        resend.Emails.send({
-            "from": "Bazaar App <no-reply@tomasbp.com>",
-            "to": [user.email], 
-            "subject": "Código de recuperación de contraseña",
-            "html": f"""
+        # ``resend`` only exposes a blocking client, so run it in a worker
+        # thread to avoid blocking the event loop.
+        await asyncio.to_thread(
+            resend.Emails.send,
+            {
+                "from": "Bazaar App <no-reply@tomasbp.com>",
+                "to": [user.email],
+                "subject": "Código de recuperación de contraseña",
+                "html": f"""
                 <h2>Recuperación de contraseña</h2>
                 <p>Tu código de seguridad de 6 dígitos es:</p>
                 <h1 style="color: #ff6900;">{codigo}</h1>
                 <p>Este código expira en 15 minutos.</p>
-            """
-        })
+            """,
+            },
+        )
     except Exception:
         raise HTTPException(status_code=500, detail="Error al intentar enviar el correo de recuperación")
 
     return success_message
 
-def verify_code(request: VerifyCodeRequest, db: Session):
-    user = user_repo.get_user_by_email(db, email=request.email)
+async def verify_code(request: VerifyCodeRequest, db: AsyncSession):
+    user = await user_repo.get_user_by_email(db, email=request.email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    db_code = user_repo.get_verification_code(db, user_id=user.id, code=request.code)
-    
+    db_code = await user_repo.get_verification_code(db, user_id=user.id, code=request.code)
+
     if not db_code:
         raise HTTPException(status_code=400, detail="Código inválido")
-    
+
     if db_code.expires_at < datetime.utcnow():
-        user_repo.delete_verification_code(db, db_code)
+        await user_repo.delete_verification_code(db, db_code)
         raise HTTPException(status_code=400, detail="El código ha expirado")
 
     return {"message": "Código verificado con éxito"}
 
-def reset_password(request: ResetPasswordRequest, db: Session):
-    user = user_repo.get_user_by_email(db, email=request.email)
+async def reset_password(request: ResetPasswordRequest, db: AsyncSession):
+    user = await user_repo.get_user_by_email(db, email=request.email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    db_code = user_repo.get_verification_code(db, user_id=user.id, code=request.code)
+    db_code = await user_repo.get_verification_code(db, user_id=user.id, code=request.code)
     if not db_code or db_code.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Sesión de recuperación inválida o expirada")
 
     hashed_pass = get_password_hash(request.new_password)
-    user_repo.update_user_password(db, user=user, hashed_pass=hashed_pass)
-    
-    user_repo.delete_verification_code(db, db_code)
+    await user_repo.update_user_password(db, user=user, hashed_pass=hashed_pass)
+
+    await user_repo.delete_verification_code(db, db_code)
 
     return {"message": "Contraseña actualizada correctamente"}
 
-def list_users(db: Session, page: int, size: int, search: str | None):
+async def list_users(db: AsyncSession, page: int, size: int, search: str | None):
     skip = (page - 1) * size
-    total, users = user_repo.get_users_paginated(db, skip=skip, limit=size, search=search)
+    total, users = await user_repo.get_users_paginated(db, skip=skip, limit=size, search=search)
     return {
         "items": users,
         "total": total,
@@ -146,37 +152,37 @@ def list_users(db: Session, page: int, size: int, search: str | None):
         "size": size
     }
 
-def block_user(db: Session, user_id: uuid.UUID, current_admin: User):
+async def block_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User):
     if current_admin.id == user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Un administrador no puede bloquearse a sí mismo.",
         )
-    
-    target_user = user_repo.get_user_by_id(db, user_id)
+
+    target_user = await user_repo.get_user_by_id(db, user_id)
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
-    
-    user_repo.set_user_active_status(db, target_user, is_active=False)
+
+    await user_repo.set_user_active_status(db, target_user, is_active=False)
     return {"message": "Usuario bloqueado correctamente"}
 
-def unblock_user(db: Session, user_id: uuid.UUID):
-    target_user = user_repo.get_user_by_id(db, user_id)
+async def unblock_user(db: AsyncSession, user_id: uuid.UUID):
+    target_user = await user_repo.get_user_by_id(db, user_id)
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
-    
-    user_repo.set_user_active_status(db, target_user, is_active=True)
+
+    await user_repo.set_user_active_status(db, target_user, is_active=True)
     return {"message": "Usuario desbloqueado correctamente"}
 
 
-def logout_user(user: object) -> None:
+async def logout_user(user: object) -> None:
     """Logout a user by revoking their tokens at the auth service."""
-    auth_client.delete_token(user_id=user.id)
+    await auth_client.delete_token(user_id=user.id)
 
 
-def login_with_google(request: GoogleLoginRequest, db: Session):
+async def login_with_google(request: GoogleLoginRequest, db: AsyncSession):
     try:
-        idinfo = google_client.verify_id_token(request.google_id_token)
+        idinfo = await asyncio.to_thread(google_client.verify_id_token, request.google_id_token)
     except ValueError as exc:
         logger.warning(
             "Google ID token verification failed (expected aud=%s): %s",
@@ -198,14 +204,14 @@ def login_with_google(request: GoogleLoginRequest, db: Session):
     if email_verified is False:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google account email not verified")
 
-    user = user_repo.get_user_by_google_id(db, google_id=google_id)
+    user = await user_repo.get_user_by_google_id(db, google_id=google_id)
 
     if user is None:
-        user = user_repo.get_user_by_email(db, email=email)
+        user = await user_repo.get_user_by_email(db, email=email)
         if user is not None:
-            user_repo.link_google_account(db, user=user, google_id=google_id)
+            await user_repo.link_google_account(db, user=user, google_id=google_id)
         else:
-            user = user_repo.create_oauth_user(db, email=email, name=name, google_id=google_id)
-            profile_client.create_profile(user_id=str(user.id), name=name or "")
+            user = await user_repo.create_oauth_user(db, email=email, name=name, google_id=google_id)
+            await profile_client.create_profile(user_id=str(user.id), name=name or "")
 
-    return auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)
+    return await auth_client.issue_token(user_id=user.id, is_admin=user.is_admin)

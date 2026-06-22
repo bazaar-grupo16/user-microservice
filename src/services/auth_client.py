@@ -7,7 +7,7 @@ from src.core.config import get_settings
 from src.core.observability import build_observability_headers
 
 
-def issue_token(user_id: UUID, is_admin: bool, timeout: float = 5.0) -> Dict[str, Any]:
+async def issue_token(user_id: UUID, is_admin: bool, timeout: float = 5.0) -> Dict[str, Any]:
     """Call external auth service to issue a token for `user_id`.
 
     Expects the external service to expose `POST /token` accepting JSON
@@ -20,18 +20,19 @@ def issue_token(user_id: UUID, is_admin: bool, timeout: float = 5.0) -> Dict[str
 
     url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/token"
 
-    resp = httpx.post(
-        url,
-        json={"user_id": str(user_id), "is_admin": is_admin},
-        headers=build_observability_headers(),
-        timeout=timeout,
-    )
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            url,
+            json={"user_id": str(user_id), "is_admin": is_admin},
+            headers=build_observability_headers(),
+            timeout=timeout,
+        )
 
     resp.raise_for_status()
     return resp.json()
 
 
-def validate_token(authorization: str, timeout: float = 5.0) -> Dict[str, Any]:
+async def validate_token(authorization: str, timeout: float = 5.0) -> Dict[str, Any]:
     """Validate a bearer token against the external auth service."""
     settings = get_settings()
     if not settings.AUTH_SERVICE_URL:
@@ -39,16 +40,17 @@ def validate_token(authorization: str, timeout: float = 5.0) -> Dict[str, Any]:
 
     url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/validate"
 
-    resp = httpx.get(
-        url,
-        headers={"Authorization": authorization, **build_observability_headers()},
-        timeout=timeout,
-    )
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            url,
+            headers={"Authorization": authorization, **build_observability_headers()},
+            timeout=timeout,
+        )
     resp.raise_for_status()
     return resp.json()
 
 
-def delete_token(user_id: UUID, timeout: float = 5.0) -> None:
+async def delete_token(user_id: UUID, timeout: float = 5.0) -> None:
     """Revoke all tokens for a user at the external auth service (logout).
     
     Expects the external service to expose `DELETE /token` accepting JSON
@@ -62,5 +64,6 @@ def delete_token(user_id: UUID, timeout: float = 5.0) -> None:
     # This avoids issues with clients/proxies that mishandle DELETE bodies.
     url = f"{settings.AUTH_SERVICE_URL.rstrip('/')}/token/{str(user_id)}"
 
-    resp = httpx.delete(url, timeout=timeout, headers=build_observability_headers())
+    async with httpx.AsyncClient() as client:
+        resp = await client.delete(url, timeout=timeout, headers=build_observability_headers())
     resp.raise_for_status()

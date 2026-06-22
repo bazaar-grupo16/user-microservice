@@ -6,7 +6,7 @@ import logging
 import time
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.observability import get_observability_correlation_id
 from src.repositories import metrics as metrics_repo
@@ -18,6 +18,12 @@ from src.schemas.metrics import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _to_naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
 
 
 def _week_start(value: date) -> date:
@@ -89,17 +95,23 @@ def _merge_buckets(
     ]
 
 
-def get_users_metrics(
-    db: Session,
+async def get_users_metrics(
+    db: AsyncSession,
     start: datetime,
     end: datetime,
     interval: MetricsInterval,
 ) -> UsersMetricResponse:
     started_at = time.perf_counter()
 
-    total_registered = metrics_repo.count_total_registered(db)
-    new_users = metrics_repo.count_new_users_in_period(db, start, end)
-    sql_rows = metrics_repo.fetch_registration_buckets(
+    # ``created_at`` is stored as a naive (UTC) timestamp.  asyncpg refuses to
+    # compare a naive column against tz-aware parameters, so normalise the
+    # incoming bounds to naive UTC before they reach the query.
+    start = _to_naive_utc(start)
+    end = _to_naive_utc(end)
+
+    total_registered = await metrics_repo.count_total_registered(db)
+    new_users = await metrics_repo.count_new_users_in_period(db, start, end)
+    sql_rows = await metrics_repo.fetch_registration_buckets(
         db,
         start,
         end,
@@ -126,12 +138,12 @@ def get_users_metrics(
     )
 
 
-def build_users_metrics_csv(
-    db: Session,
+async def build_users_metrics_csv(
+    db: AsyncSession,
     start: datetime,
     end: datetime,
 ) -> tuple[str, str]:
-    metrics = get_users_metrics(db, start, end, MetricsInterval.day)
+    metrics = await get_users_metrics(db, start, end, MetricsInterval.day)
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)

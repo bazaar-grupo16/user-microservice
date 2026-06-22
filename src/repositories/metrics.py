@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.user import User
 
@@ -15,12 +15,12 @@ def _eligible_users_filter():
     return User.is_admin.is_(False)
 
 
-def count_total_registered(db: Session) -> int:
+async def count_total_registered(db: AsyncSession) -> int:
     stmt = select(func.count()).select_from(User).where(_eligible_users_filter())
-    return int(db.scalar(stmt) or 0)
+    return int(await db.scalar(stmt) or 0)
 
 
-def count_new_users_in_period(db: Session, start: datetime, end: datetime) -> int:
+async def count_new_users_in_period(db: AsyncSession, start: datetime, end: datetime) -> int:
     stmt = (
         select(func.count())
         .select_from(User)
@@ -30,11 +30,11 @@ def count_new_users_in_period(db: Session, start: datetime, end: datetime) -> in
             User.created_at <= end,
         )
     )
-    return int(db.scalar(stmt) or 0)
+    return int(await db.scalar(stmt) or 0)
 
 
-def fetch_registration_buckets(
-    db: Session,
+async def fetch_registration_buckets(
+    db: AsyncSession,
     start: datetime,
     end: datetime,
     interval: IntervalLiteral,
@@ -50,5 +50,5 @@ def fetch_registration_buckets(
         .group_by(bucket)
         .order_by(bucket)
     )
-    rows = db.execute(stmt).all()
+    rows = (await db.execute(stmt)).all()
     return [(row[0], int(row[1])) for row in rows if row[0] is not None]

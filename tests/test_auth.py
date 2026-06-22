@@ -3,15 +3,39 @@
 These tests exercise the controller through the FastAPI route and use the
 real PostgreSQL-backed test setup.
 """
+import asyncio
 import pytest
 from datetime import datetime, timedelta
 from uuid import uuid4, UUID
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from src.core.database import SessionLocal
 from src.core.security import get_password_hash
 from src.models.user import User, VerificationCode
+
+
+async def _add_and_detach(obj):
+    """Persist ``obj`` with a fresh async session and return it detached."""
+    async with SessionLocal() as db:
+        db.add(obj)
+        await db.commit()
+        await db.refresh(obj)
+        db.expunge(obj)
+        return obj
+
+
+async def _fetch_user_by_email(email: str) -> User | None:
+    async with SessionLocal() as db:
+        result = await db.execute(select(User).where(User.email == email))
+        return result.scalar_one_or_none()
+
+
+async def _fetch_user_by_id(user_id) -> User | None:
+    async with SessionLocal() as db:
+        result = await db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
 
 
 class TestGoogleLogin:
@@ -36,45 +60,39 @@ class TestGoogleLogin:
         assert isinstance(body["refresh_token"], str)
         assert body["token_type"] == "bearer"
 
-        with SessionLocal() as db:
-            user = db.query(User).filter(User.email == email).first()
-            assert user is not None
-            assert user.google_id == google_id
-            assert user.password is None
+        user = asyncio.run(_fetch_user_by_email(email))
+        assert user is not None
+        assert user.google_id == google_id
+        assert user.password is None
 
     def test_existing_password_account_is_linked(self, client: TestClient, monkeypatch) -> None:
         email = f"link-{uuid4().hex}@gmail.com"
         google_id = f"google-sub-{uuid4().hex}"
 
-        with SessionLocal() as db:
-            existing = User(
-                id=uuid4(),
-                email=email,
-                password=get_password_hash("Correct-P4ssw0rd!"),
-                name="Existing User",
-            )
-            db.add(existing)
-            db.commit()
-            existing_id = existing.id
+        existing = User(
+            id=uuid4(),
+            email=email,
+            password=get_password_hash("Correct-P4ssw0rd!"),
+            name="Existing User",
+        )
+        existing = asyncio.run(_add_and_detach(existing))
+        existing_id = existing.id
 
         self._stub_google(monkeypatch, email=email, google_id=google_id)
         response = client.post("/login/google", json={"google_id_token": "any-token"})
 
         assert response.status_code == 200
 
-        with SessionLocal() as db:
-            user = db.query(User).filter(User.id == existing_id).first()
-            assert user.google_id == google_id
-            assert user.password is not None  # original password preserved
+        user = asyncio.run(_fetch_user_by_id(existing_id))
+        assert user.google_id == google_id
+        assert user.password is not None  # original password preserved
 
     def test_returning_google_user_gets_tokens(self, client: TestClient, monkeypatch) -> None:
         email = f"returning-{uuid4().hex}@gmail.com"
         google_id = f"google-sub-{uuid4().hex}"
 
-        with SessionLocal() as db:
-            returning = User(id=uuid4(), email=email, google_id=google_id, name="Returning User")
-            db.add(returning)
-            db.commit()
+        returning = User(id=uuid4(), email=email, google_id=google_id, name="Returning User")
+        asyncio.run(_add_and_detach(returning))
 
         self._stub_google(monkeypatch, email=email, google_id=google_id)
         response = client.post("/login/google", json={"google_id_token": "any-token"})
@@ -229,20 +247,15 @@ class TestAdminAuth:
         is_active: bool = True,
         name: str = "Admin Test User",
     ) -> User:
-        with SessionLocal() as db:
-            user = User(
-                id=uuid4(),
-                email=email,
-                password=get_password_hash(password),
-                name=name,
-                is_active=is_active,
-                is_admin=is_admin,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            db.expunge(user)
-            return user
+        user = User(
+            id=uuid4(),
+            email=email,
+            password=get_password_hash(password),
+            name=name,
+            is_active=is_active,
+            is_admin=is_admin,
+        )
+        return asyncio.run(_add_and_detach(user))
 
     def test_admin_login_returns_200_for_admin_user(self, client: TestClient) -> None:
         email = f"admin-login-{uuid4().hex}@example.com"
@@ -345,19 +358,23 @@ class TestPasswordRecovery:
         }
 
     def _create_valid_recovery_code(self, email: str, code: str) -> None:
-        with SessionLocal() as db:
-            user = db.query(User).filter(User.email == email).first()
-            assert user is not None
+        async def _do() -> None:
+            async with SessionLocal() as db:
+                result = await db.execute(select(User).where(User.email == email))
+                user = result.scalar_one_or_none()
+                assert user is not None
 
-            db.add(
-                VerificationCode(
-                    id=uuid4(),
-                    user_id=user.id,
-                    code=code,
-                    expires_at=datetime.utcnow() + timedelta(minutes=10),
+                db.add(
+                    VerificationCode(
+                        id=uuid4(),
+                        user_id=user.id,
+                        code=code,
+                        expires_at=datetime.utcnow() + timedelta(minutes=10),
+                    )
                 )
-            )
-            db.commit()
+                await db.commit()
+
+        asyncio.run(_do())
 
     def test_reset_password_succeeds_with_valid_code(self, client: TestClient) -> None:
         email = f"recovery-ok-{uuid4().hex}@example.com"
@@ -452,20 +469,15 @@ class TestAuthLogout:
         is_active: bool = True,
         name: str = "Test User",
     ) -> User:
-        with SessionLocal() as db:
-            user = User(
-                id=uuid4(),
-                email=email,
-                password=get_password_hash(password),
-                name=name,
-                is_active=is_active,
-                is_admin=is_admin,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            db.expunge(user)
-            return user
+        user = User(
+            id=uuid4(),
+            email=email,
+            password=get_password_hash(password),
+            name=name,
+            is_active=is_active,
+            is_admin=is_admin,
+        )
+        return asyncio.run(_add_and_detach(user))
 
     def test_logout_returns_204_for_valid_token(self, client: TestClient) -> None:
         user = self._create_user(email=f"logout-{uuid4().hex}@example.com")
