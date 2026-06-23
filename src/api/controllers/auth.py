@@ -172,10 +172,24 @@ async def block_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
     
     await user_repo.set_user_active_status(db, target_user, is_active=False)
-    
+
+    try:
+        await catalog_client.block_seller_products(str(user_id), str(current_admin.id))
+    except Exception:
+        # Blocking products in the catalog is the second half of an atomic
+        # action. If it fails we must not leave the user blocked while their
+        # products stay live, so roll the block back and tell the client to retry.
+        logger.exception("Catalog block failed for user %s; rolling back user block", user_id)
+        await user_repo.set_user_active_status(db, target_user, is_active=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudieron bloquear los productos del usuario en el catálogo. Se revirtió el bloqueo. Intente nuevamente.",
+        )
+
+    # Revoke the user's sessions only after the block has fully succeeded, so a
+    # rolled-back block never leaves the user logged out.
     await auth_client.delete_token(user_id=target_user.id)
-    await catalog_client.block_seller_products(str(user_id), str(current_admin.id))
-    
+
     return {"message": "Usuario y productos bloqueados correctamente"}
 
 async def unblock_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User):
@@ -184,9 +198,19 @@ async def unblock_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
     await user_repo.set_user_active_status(db, target_user, is_active=True)
-    
-    await catalog_client.unblock_seller_products(str(user_id), str(current_admin.id))
-    
+
+    try:
+        await catalog_client.unblock_seller_products(str(user_id), str(current_admin.id))
+    except Exception:
+        # Same atomicity concern as block_user: if the catalog can't be
+        # updated, revert the unblock and signal the client to retry.
+        logger.exception("Catalog unblock failed for user %s; rolling back user unblock", user_id)
+        await user_repo.set_user_active_status(db, target_user, is_active=False)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudieron rehabilitar los productos del usuario en el catálogo. Se revirtió el desbloqueo. Intente nuevamente.",
+        )
+
     return {"message": "Usuario y productos desbloqueados correctamente"}
 
 
