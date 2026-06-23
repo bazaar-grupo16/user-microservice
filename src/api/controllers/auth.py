@@ -39,12 +39,12 @@ async def register_user(user_in: UserCreate, db: AsyncSession):
 
 async def login_user(user_in: UserLogin, db: AsyncSession):
     user = await user_repo.get_user_by_email(db, email=user_in.email)
-    if not user or not verify_password(user_in.password, user.password):
+    if not user or not await asyncio.to_thread(verify_password, user_in.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -58,7 +58,7 @@ async def login_admin(user_in: UserLogin, db: AsyncSession):
     user = await user_repo.get_user_by_email(db, email=user_in.email)
     if (
         not user
-        or not verify_password(user_in.password, user.password)
+        or not await asyncio.to_thread(verify_password, user_in.password, user.password)
         or not user.is_active
         or not user.is_admin
     ):
@@ -135,7 +135,7 @@ async def reset_password(request: ResetPasswordRequest, db: AsyncSession):
     if not db_code or db_code.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Sesión de recuperación inválida o expirada")
 
-    hashed_pass = get_password_hash(request.new_password)
+    hashed_pass = await asyncio.to_thread(get_password_hash, request.new_password)
     await user_repo.update_user_password(db, user=user, hashed_pass=hashed_pass)
 
     await user_repo.delete_verification_code(db, db_code)
