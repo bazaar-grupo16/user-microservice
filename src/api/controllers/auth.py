@@ -29,10 +29,18 @@ async def register_user(user_in: UserCreate, db: AsyncSession):
         )
     new_user = await user_repo.create_user(db, user_in=user_in)
 
-    await profile_client.create_profile(
-        user_id=str(new_user.id),
-        name=user_in.name
-    )
+    try:
+        await profile_client.create_profile(
+            user_id=str(new_user.id),
+            name=user_in.name
+        )
+    except Exception:
+        await user_repo.delete_user(db, user=new_user)
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="El servicio de perfiles no responde. Se revirtió la creación de la cuenta."
+        )
 
     return new_user
 
@@ -162,10 +170,10 @@ async def block_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User):
     target_user = await user_repo.get_user_by_id(db, user_id)
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
-
+    
     await user_repo.set_user_active_status(db, target_user, is_active=False)
     
-    
+    await auth_client.delete_token(user_id=target_user.id)
     await catalog_client.block_seller_products(str(user_id), str(current_admin.id))
     
     return {"message": "Usuario y productos bloqueados correctamente"}

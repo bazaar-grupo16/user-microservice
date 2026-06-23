@@ -106,3 +106,7 @@ async def set_user_active_status(db: AsyncSession, user: User, is_active: bool) 
     await db.commit()
     await db.refresh(user)
     return user
+
+async def delete_user(db: AsyncSession, user: User):
+    await db.delete(user)
+    await db.commit()

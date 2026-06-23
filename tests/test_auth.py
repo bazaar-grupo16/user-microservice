@@ -505,3 +505,408 @@ class TestAuthLogout:
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Could not validate credentials"}
+
+
+class TestRegisterProfileServiceFailure:
+    def test_register_returns_500_when_profile_service_fails(self, client: TestClient, monkeypatch) -> None:
+        from src.services import profile_client
+
+        monkeypatch.setattr(profile_client, "create_profile", lambda **_: (_ for _ in ()).throw(Exception("down")))
+
+        email = f"profile-fail-{uuid4().hex}@example.com"
+        response = client.post("/register", json={
+            "email": email,
+            "password": "Correct-P4ssw0rd!",
+            "name": "Test User",
+        })
+
+        assert response.status_code == 500
+        assert "perfiles" in response.json()["detail"].lower()
+
+    def test_register_rolls_back_user_when_profile_service_fails(self, client: TestClient, monkeypatch) -> None:
+        from src.services import profile_client
+
+        monkeypatch.setattr(profile_client, "create_profile", lambda **_: (_ for _ in ()).throw(Exception("down")))
+
+        email = f"profile-fail-rollback-{uuid4().hex}@example.com"
+        client.post("/register", json={
+            "email": email,
+            "password": "Correct-P4ssw0rd!",
+            "name": "Test User",
+        })
+
+        user = asyncio.run(_fetch_user_by_email(email))
+        assert user is None
+
+
+class TestLoginBlockedUser:
+    def _create_user(self, email: str, password: str = "Correct-P4ssw0rd!", is_active: bool = True) -> User:
+        user = User(
+            id=uuid4(),
+            email=email,
+            password=get_password_hash(password),
+            name="Blocked Test User",
+            is_active=is_active,
+            is_admin=False,
+        )
+        return asyncio.run(_add_and_detach(user))
+
+    def test_blocked_user_cannot_login(self, client: TestClient) -> None:
+        email = f"blocked-login-{uuid4().hex}@example.com"
+        password = "Correct-P4ssw0rd!"
+        self._create_user(email=email, password=password, is_active=False)
+
+        response = client.post("/login", json={"email": email, "password": password})
+
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Tu cuenta está suspendida. Por favor, contacta a soporte."}
+
+
+class TestAdminBlockUser:
+    def _create_user(
+        self,
+        email: str,
+        password: str = "Correct-P4ssw0rd!",
+        is_admin: bool = False,
+        is_active: bool = True,
+    ) -> User:
+        user = User(
+            id=uuid4(),
+            email=email,
+            password=get_password_hash(password),
+            name="Block Test User",
+            is_active=is_active,
+            is_admin=is_admin,
+        )
+        return asyncio.run(_add_and_detach(user))
+
+    def test_admin_blocks_user_successfully(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-block-{uuid4().hex}@example.com", is_admin=True)
+        target = self._create_user(email=f"target-block-{uuid4().hex}@example.com")
+
+        response = client.patch(
+            f"/admin/users/{target.id}/block",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"message": "Usuario bloqueado correctamente"}
+
+        updated = asyncio.run(_fetch_user_by_id(target.id))
+        assert updated.is_active is False
+
+    def test_blocked_user_cannot_login_after_block(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-block2-{uuid4().hex}@example.com", is_admin=True)
+        email = f"target-block2-{uuid4().hex}@example.com"
+        password = "Correct-P4ssw0rd!"
+        target = self._create_user(email=email, password=password)
+
+        client.patch(
+            f"/admin/users/{target.id}/block",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        login_response = client.post("/login", json={"email": email, "password": password})
+        assert login_response.status_code == 403
+
+    def test_admin_cannot_block_themselves(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-self-block-{uuid4().hex}@example.com", is_admin=True)
+
+        response = client.patch(
+            f"/admin/users/{admin.id}/block",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Un administrador no puede bloquearse a sí mismo."}
+
+    def test_admin_block_returns_404_for_nonexistent_user(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-block-404-{uuid4().hex}@example.com", is_admin=True)
+
+        response = client.patch(
+            f"/admin/users/{uuid4()}/block",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Usuario no encontrado"}
+
+    def test_non_admin_cannot_block_user(self, client: TestClient) -> None:
+        regular = self._create_user(email=f"regular-block-{uuid4().hex}@example.com")
+        target = self._create_user(email=f"target-regular-block-{uuid4().hex}@example.com")
+
+        response = client.patch(
+            f"/admin/users/{target.id}/block",
+            headers={"Authorization": f"Bearer token-for-{regular.id}"},
+        )
+
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Admin access required"}
+
+    def test_block_requires_authentication(self, client: TestClient) -> None:
+        target = self._create_user(email=f"target-noauth-block-{uuid4().hex}@example.com")
+
+        response = client.patch(f"/admin/users/{target.id}/block")
+
+        assert response.status_code == 401
+
+
+class TestAdminUnblockUser:
+    def _create_user(
+        self,
+        email: str,
+        password: str = "Correct-P4ssw0rd!",
+        is_admin: bool = False,
+        is_active: bool = True,
+    ) -> User:
+        user = User(
+            id=uuid4(),
+            email=email,
+            password=get_password_hash(password),
+            name="Unblock Test User",
+            is_active=is_active,
+            is_admin=is_admin,
+        )
+        return asyncio.run(_add_and_detach(user))
+
+    def test_admin_unblocks_user_successfully(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-unblock-{uuid4().hex}@example.com", is_admin=True)
+        target = self._create_user(email=f"target-unblock-{uuid4().hex}@example.com", is_active=False)
+
+        response = client.patch(
+            f"/admin/users/{target.id}/unblock",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"message": "Usuario desbloqueado correctamente"}
+
+        updated = asyncio.run(_fetch_user_by_id(target.id))
+        assert updated.is_active is True
+
+    def test_unblocked_user_can_login_again(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-unblock2-{uuid4().hex}@example.com", is_admin=True)
+        email = f"target-unblock2-{uuid4().hex}@example.com"
+        password = "Correct-P4ssw0rd!"
+        target = self._create_user(email=email, password=password, is_active=False)
+
+        client.patch(
+            f"/admin/users/{target.id}/unblock",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        login_response = client.post("/login", json={"email": email, "password": password})
+        assert login_response.status_code == 200
+
+    def test_admin_unblock_returns_404_for_nonexistent_user(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-unblock-404-{uuid4().hex}@example.com", is_admin=True)
+
+        response = client.patch(
+            f"/admin/users/{uuid4()}/unblock",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Usuario no encontrado"}
+
+    def test_non_admin_cannot_unblock_user(self, client: TestClient) -> None:
+        regular = self._create_user(email=f"regular-unblock-{uuid4().hex}@example.com")
+        target = self._create_user(email=f"target-regular-unblock-{uuid4().hex}@example.com", is_active=False)
+
+        response = client.patch(
+            f"/admin/users/{target.id}/unblock",
+            headers={"Authorization": f"Bearer token-for-{regular.id}"},
+        )
+
+        assert response.status_code == 403
+
+    def test_unblock_requires_authentication(self, client: TestClient) -> None:
+        target = self._create_user(email=f"target-noauth-unblock-{uuid4().hex}@example.com", is_active=False)
+
+        response = client.patch(f"/admin/users/{target.id}/unblock")
+
+        assert response.status_code == 401
+
+
+class TestAdminListUsers:
+    def _create_user(
+        self,
+        email: str,
+        is_admin: bool = False,
+        is_active: bool = True,
+        name: str = "List Test User",
+    ) -> User:
+        user = User(
+            id=uuid4(),
+            email=email,
+            password=get_password_hash("Correct-P4ssw0rd!"),
+            name=name,
+            is_active=is_active,
+            is_admin=is_admin,
+        )
+        return asyncio.run(_add_and_detach(user))
+
+    def test_admin_can_list_users(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-list-{uuid4().hex}@example.com", is_admin=True)
+
+        response = client.get(
+            "/admin/users",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert isinstance(body["items"], list)
+        assert isinstance(body["total"], int)
+        assert body["page"] == 1
+        assert body["size"] == 10
+
+    def test_list_users_respects_pagination(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-paginate-{uuid4().hex}@example.com", is_admin=True)
+
+        response = client.get(
+            "/admin/users?page=1&size=3",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["page"] == 1
+        assert body["size"] == 3
+        assert len(body["items"]) <= 3
+
+    def test_list_users_search_filters_by_name(self, client: TestClient) -> None:
+        unique_name = f"UniqueName{uuid4().hex[:8]}"
+        admin = self._create_user(email=f"admin-search-{uuid4().hex}@example.com", is_admin=True)
+        self._create_user(email=f"search-target-{uuid4().hex}@example.com", name=unique_name)
+
+        response = client.get(
+            f"/admin/users?search={unique_name}",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] >= 1
+        assert any(u["name"] == unique_name for u in body["items"])
+
+    def test_non_admin_cannot_list_users(self, client: TestClient) -> None:
+        regular = self._create_user(email=f"regular-list-{uuid4().hex}@example.com")
+
+        response = client.get(
+            "/admin/users",
+            headers={"Authorization": f"Bearer token-for-{regular.id}"},
+        )
+
+        assert response.status_code == 403
+
+    def test_list_users_requires_authentication(self, client: TestClient) -> None:
+        response = client.get("/admin/users")
+
+        assert response.status_code == 401
+
+    def test_list_users_rejects_page_less_than_one(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-badpage-{uuid4().hex}@example.com", is_admin=True)
+
+        response = client.get(
+            "/admin/users?page=0",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 422
+
+    def test_list_users_rejects_size_over_maximum(self, client: TestClient) -> None:
+        admin = self._create_user(email=f"admin-badsize-{uuid4().hex}@example.com", is_admin=True)
+
+        response = client.get(
+            "/admin/users?size=101",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 422
+
+
+class TestVerifyCode:
+    def _register_and_create_code(
+        self, client: TestClient, email: str, code: str, expired: bool = False
+    ) -> None:
+        client.post("/register", json={
+            "email": email,
+            "password": "Correct-P4ssw0rd!",
+            "name": "Verify User",
+        })
+        async def _do() -> None:
+            async with SessionLocal() as db:
+                result = await db.execute(select(User).where(User.email == email))
+                user = result.scalar_one_or_none()
+                expiry = (
+                    datetime.utcnow() - timedelta(minutes=1)
+                    if expired
+                    else datetime.utcnow() + timedelta(minutes=10)
+                )
+                db.add(VerificationCode(id=uuid4(), user_id=user.id, code=code, expires_at=expiry))
+                await db.commit()
+
+        asyncio.run(_do())
+
+    def test_verify_code_succeeds_with_valid_code(self, client: TestClient) -> None:
+        email = f"verify-ok-{uuid4().hex}@example.com"
+        self._register_and_create_code(client, email, "777777")
+
+        response = client.post("/verify-code", json={"email": email, "code": "777777"})
+
+        assert response.status_code == 200
+        assert response.json() == {"message": "Código verificado con éxito"}
+
+    def test_verify_code_rejects_wrong_code(self, client: TestClient) -> None:
+        email = f"verify-bad-{uuid4().hex}@example.com"
+        self._register_and_create_code(client, email, "888888")
+
+        response = client.post("/verify-code", json={"email": email, "code": "000000"})
+
+        assert response.status_code == 400
+        assert response.json() == {"detail": "Código inválido"}
+
+    def test_verify_code_rejects_expired_code(self, client: TestClient) -> None:
+        email = f"verify-expired-{uuid4().hex}@example.com"
+        self._register_and_create_code(client, email, "999999", expired=True)
+
+        response = client.post("/verify-code", json={"email": email, "code": "999999"})
+
+        assert response.status_code == 400
+        assert response.json() == {"detail": "El código ha expirado"}
+
+    def test_verify_code_returns_404_for_unknown_email(self, client: TestClient) -> None:
+        response = client.post("/verify-code", json={
+            "email": f"nonexistent-{uuid4().hex}@example.com",
+            "code": "123456",
+        })
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Usuario no encontrado"}
+
+
+class TestForgotPassword:
+    def test_forgot_password_returns_200_for_registered_email(self, client: TestClient, monkeypatch) -> None:
+        import resend
+        monkeypatch.setattr(resend.Emails, "send", lambda params: {"id": "fake-email-id"})
+
+        email = f"forgot-ok-{uuid4().hex}@example.com"
+        client.post("/register", json={
+            "email": email,
+            "password": "Correct-P4ssw0rd!",
+            "name": "Forgot User",
+        })
+
+        response = client.post("/forgot-password", json={"email": email})
+
+        assert response.status_code == 200
+        assert response.json() == {"message": "Si el email está registrado, te enviaremos un código."}
+
+    def test_forgot_password_returns_same_message_for_unregistered_email(self, client: TestClient) -> None:
+        response = client.post("/forgot-password", json={
+            "email": f"notregistered-{uuid4().hex}@example.com",
+        })
+
+        assert response.status_code == 200
+        assert response.json() == {"message": "Si el email está registrado, te enviaremos un código."}
