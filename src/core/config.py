@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     AUTH_SERVICE_URL: str = "http://auth-service"
     # ── External Profile Service ───────────────────────
     PROFILE_SERVICE_URL: str = "http://profile-service/profile/"
+    # ── External Catalog Service ───────────────────────
+    CATALOG_SERVICE_URL: str = "http://catalog-service"
 
 # ── Resend ───────────────────────────────────────────
     RESEND_API_KEY: str = ""

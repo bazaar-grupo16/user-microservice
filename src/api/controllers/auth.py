@@ -10,7 +10,7 @@ import resend
 import random
 from datetime import datetime, timedelta
 from src.core.config import get_settings
-from src.services import auth_client, profile_client, google_client
+from src.services import auth_client, profile_client, google_client, catalog_client
 import logging
 import uuid
 
@@ -47,12 +47,12 @@ async def register_user(user_in: UserCreate, db: AsyncSession):
 
 async def login_user(user_in: UserLogin, db: AsyncSession):
     user = await user_repo.get_user_by_email(db, email=user_in.email)
-    if not user or not verify_password(user_in.password, user.password):
+    if not user or not await asyncio.to_thread(verify_password, user_in.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -66,7 +66,7 @@ async def login_admin(user_in: UserLogin, db: AsyncSession):
     user = await user_repo.get_user_by_email(db, email=user_in.email)
     if (
         not user
-        or not verify_password(user_in.password, user.password)
+        or not await asyncio.to_thread(verify_password, user_in.password, user.password)
         or not user.is_active
         or not user.is_admin
     ):
@@ -143,7 +143,7 @@ async def reset_password(request: ResetPasswordRequest, db: AsyncSession):
     if not db_code or db_code.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Sesión de recuperación inválida o expirada")
 
-    hashed_pass = get_password_hash(request.new_password)
+    hashed_pass = await asyncio.to_thread(get_password_hash, request.new_password)
     await user_repo.update_user_password(db, user=user, hashed_pass=hashed_pass)
 
     await user_repo.delete_verification_code(db, db_code)
@@ -172,16 +172,46 @@ async def block_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
     
     await user_repo.set_user_active_status(db, target_user, is_active=False)
-    await auth_client.delete_token(user_id=target_user.id)
-    return {"message": "Usuario bloqueado correctamente"}
 
-async def unblock_user(db: AsyncSession, user_id: uuid.UUID):
+    try:
+        await catalog_client.block_seller_products(str(user_id), str(current_admin.id))
+    except Exception:
+        # Blocking products in the catalog is the second half of an atomic
+        # action. If it fails we must not leave the user blocked while their
+        # products stay live, so roll the block back and tell the client to retry.
+        logger.exception("Catalog block failed for user %s; rolling back user block", user_id)
+        await user_repo.set_user_active_status(db, target_user, is_active=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudieron bloquear los productos del usuario en el catálogo. Se revirtió el bloqueo. Intente nuevamente.",
+        )
+
+    # Revoke the user's sessions only after the block has fully succeeded, so a
+    # rolled-back block never leaves the user logged out.
+    await auth_client.delete_token(user_id=target_user.id)
+
+    return {"message": "Usuario y productos bloqueados correctamente"}
+
+async def unblock_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User):
     target_user = await user_repo.get_user_by_id(db, user_id)
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
 
     await user_repo.set_user_active_status(db, target_user, is_active=True)
-    return {"message": "Usuario desbloqueado correctamente"}
+
+    try:
+        await catalog_client.unblock_seller_products(str(user_id), str(current_admin.id))
+    except Exception:
+        # Same atomicity concern as block_user: if the catalog can't be
+        # updated, revert the unblock and signal the client to retry.
+        logger.exception("Catalog unblock failed for user %s; rolling back user unblock", user_id)
+        await user_repo.set_user_active_status(db, target_user, is_active=False)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudieron rehabilitar los productos del usuario en el catálogo. Se revirtió el desbloqueo. Intente nuevamente.",
+        )
+
+    return {"message": "Usuario y productos desbloqueados correctamente"}
 
 
 async def logout_user(user: object) -> None:

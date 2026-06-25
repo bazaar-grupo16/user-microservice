@@ -101,6 +101,25 @@ def mock_profile_service(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def mock_catalog_service(monkeypatch):
+    """Mock the catalog client so block/unblock don't hit a real service."""
+
+    os.environ["CATALOG_SERVICE_URL"] = "http://fake-catalog-service.test"
+
+    from src.services import catalog_client
+
+    async def _fake_block(seller_id: str, admin_id: str):
+        return {}
+
+    async def _fake_unblock(seller_id: str, admin_id: str):
+        return {}
+
+    monkeypatch.setattr(catalog_client, "block_seller_products", _fake_block)
+    monkeypatch.setattr(catalog_client, "unblock_seller_products", _fake_unblock)
+    yield
+
+
 async def _create_schema() -> None:
     sql_path = (
         Path(__file__).resolve().parents[1] / "scripts" / "add_users_created_at_index.sql"

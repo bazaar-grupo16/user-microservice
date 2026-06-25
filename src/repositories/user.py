@@ -1,3 +1,5 @@
+import asyncio
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.user import User, VerificationCode
 from datetime import datetime
@@ -18,7 +20,7 @@ async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
 
 
 async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
-    hashed_pass = get_password_hash(user_in.password)
+    hashed_pass = await asyncio.to_thread(get_password_hash, user_in.password)
     new_user = User(id=uuid.uuid4(),email=user_in.email, password=hashed_pass, name=user_in.name)
 
     db.add(new_user)

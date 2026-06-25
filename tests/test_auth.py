@@ -590,10 +590,32 @@ class TestAdminBlockUser:
         )
 
         assert response.status_code == 200
-        assert response.json() == {"message": "Usuario bloqueado correctamente"}
+        assert response.json() == {"message": "Usuario y productos bloqueados correctamente"}
 
         updated = asyncio.run(_fetch_user_by_id(target.id))
         assert updated.is_active is False
+
+    def test_block_rolls_back_and_returns_503_when_catalog_fails(self, client: TestClient, monkeypatch) -> None:
+        from src.services import catalog_client
+
+        async def _fail(*_args, **_kwargs):
+            raise Exception("catalog unavailable")
+
+        monkeypatch.setattr(catalog_client, "block_seller_products", _fail)
+
+        admin = self._create_user(email=f"admin-block-rollback-{uuid4().hex}@example.com", is_admin=True)
+        target = self._create_user(email=f"target-block-rollback-{uuid4().hex}@example.com")
+
+        response = client.patch(
+            f"/admin/users/{target.id}/block",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 503
+
+        # The block must have been rolled back: user remains active.
+        updated = asyncio.run(_fetch_user_by_id(target.id))
+        assert updated.is_active is True
 
     def test_blocked_user_cannot_login_after_block(self, client: TestClient) -> None:
         admin = self._create_user(email=f"admin-block2-{uuid4().hex}@example.com", is_admin=True)
@@ -679,10 +701,32 @@ class TestAdminUnblockUser:
         )
 
         assert response.status_code == 200
-        assert response.json() == {"message": "Usuario desbloqueado correctamente"}
+        assert response.json() == {"message": "Usuario y productos desbloqueados correctamente"}
 
         updated = asyncio.run(_fetch_user_by_id(target.id))
         assert updated.is_active is True
+
+    def test_unblock_rolls_back_and_returns_503_when_catalog_fails(self, client: TestClient, monkeypatch) -> None:
+        from src.services import catalog_client
+
+        async def _fail(*_args, **_kwargs):
+            raise Exception("catalog unavailable")
+
+        monkeypatch.setattr(catalog_client, "unblock_seller_products", _fail)
+
+        admin = self._create_user(email=f"admin-unblock-rollback-{uuid4().hex}@example.com", is_admin=True)
+        target = self._create_user(email=f"target-unblock-rollback-{uuid4().hex}@example.com", is_active=False)
+
+        response = client.patch(
+            f"/admin/users/{target.id}/unblock",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+
+        assert response.status_code == 503
+
+        # The unblock must have been rolled back: user remains blocked.
+        updated = asyncio.run(_fetch_user_by_id(target.id))
+        assert updated.is_active is False
 
     def test_unblocked_user_can_login_again(self, client: TestClient) -> None:
         admin = self._create_user(email=f"admin-unblock2-{uuid4().hex}@example.com", is_admin=True)
