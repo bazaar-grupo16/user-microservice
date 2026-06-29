@@ -1,4 +1,4 @@
-# Bazaar — Microservice Template
+# Bazaar — Users Microservice
 
 Base inicial para el microservicio `user-service`, construido sobre el template de microservicios con FastAPI y PostgreSQL.
 
@@ -16,36 +16,67 @@ Base inicial para el microservicio `user-service`, construido sobre el template 
 
 ```
 ├── src/
-│   ├── api/            # Routers de FastAPI
+│   ├── api/            # Controladores y routers de FastAPI
+│   │   ├── controllers/ # Lógica de los endpoints
+│   │   │   └── auth.py
+│   │   ├── routers/    # Definición de rutas
+│   │   │   ├── auth.py
+│   │   │   └── metrics.py
 │   │   └── health.py   # /livez y /readyz
-│   ├── core/           # Configuración, DB, logging
+│   ├── core/           # Configuración, DB, logging y seguridad
 │   │   ├── config.py
 │   │   ├── database.py  # Engine, sesión, base, y retry de conexión
 │   │   ├── dependencies.py
-│   │   └── logging.py
-│   ├── models/         # Entidades SQLAlchemy (vacío — extender aquí)
-│   ├── schemas/        # Modelos Pydantic (vacío — extender aquí)
-│   ├── services/       # Lógica de negocio (vacío — extender aquí)
-│   └── main.py         # Punto de entrada
+│   │   ├── logging.py
+│   │   ├── observability.py # Middleware de correlación e ID de request
+│   │   ├── security.py  # Hasheo y verificación de contraseñas
+│   │   └── telemetry.py # Tracing y métricas de Prometheus
+│   ├── models/         # Entidades SQLAlchemy
+│   │   └── user.py
+│   ├── repositories/   # Capa de acceso a base de datos (patrón Repository)
+│   │   ├── metrics.py
+│   │   └── user.py
+│   ├── schemas/        # Modelos Pydantic para validación de datos
+│   │   ├── metrics.py
+│   │   └── user.py
+│   ├── services/       # Clientes de servicios externos y lógica adicional
+│   │   ├── auth_client.py
+│   │   ├── catalog_client.py
+│   │   ├── google_client.py
+│   │   ├── metrics.py
+│   │   └── profile_client.py
+│   └── main.py         # Punto de entrada de la aplicación
 ├── tests/
 │   ├── conftest.py
-│   └── test_health.py
+│   ├── test_auth.py
+│   ├── test_auth_login_acceptance.py
+│   ├── test_health.py
+│   ├── test_metrics.py
+│   └── test_observability.py
 ├── scripts/
-│   ├── run_tests.sh    # Wrapper para correr tests (Linux/macOS)
-│   └── run_tests.ps1   # Wrapper para correr tests (Windows)
+│   ├── add_google_auth.sql          # Migración para soporte de Google Auth
+│   ├── add_is_admin_column.sql      # Migración para columna is_admin
+│   ├── add_users_created_at_index.sql # Índice de rendimiento para métricas
+│   ├── generate_openapi.py          # Generador del esquema OpenAPI
+│   ├── run_tests.sh                 # Wrapper para correr tests (Linux/macOS)
+│   ├── run_tests.ps1                # Wrapper para correr tests (Windows)
+│   └── seed_admin.py                # Semilla para crear usuario administrador
 ├── k8s/
 │   ├── app-deployment.yaml   # Deployment del microservicio
 │   ├── app-service.yaml      # Service (ClusterIP) del microservicio
 │   ├── db-deployment.yaml    # Deployment de PostgreSQL
 │   ├── db-service.yaml       # Service (ClusterIP) de PostgreSQL
 │   ├── db-pvc.yaml           # PersistentVolumeClaim para la BD
-│   └── secret.yaml           # ⚠️ Template — NO commitear valores reales
+│   ├── ingress.yaml          # Configuración del Ingress Controller
+│   └── secret.yaml           # Template de Secrets
 ├── .github/workflows/
 │   └── deploy.yml
 ├── Dockerfile              # Imagen de producción
 ├── Dockerfile.test         # Imagen para correr tests
 ├── docker-compose.test.yml # Levanta PostgreSQL + test runner
+├── docker-compose.yml      # Docker Compose para desarrollo local
 ├── requirements.txt
+├── uv.lock
 └── .env.example
 ```
 
@@ -91,7 +122,7 @@ Readiness probe. Verifica conectividad con la base de datos.
 
 ### Auth
 
-#### POST /auth/register
+#### POST /register
 
 Registra un usuario nuevo.
 
@@ -109,7 +140,7 @@ Body esperado:
 
 ```json
 {
-	"id": 1,
+	"id": "e4b8f6f3-8d70-4f59-9f51-92f8a27ec0ba",
 	"email": "user@example.com",
 	"name": "Test User",
 	"is_active": true,
@@ -144,7 +175,7 @@ Ejemplo de error de validación:
 }
 ```
 
-#### POST /auth/login
+#### POST /login
 
 Autentica un usuario y devuelve JWT (access y refresh tokens).
 
@@ -178,13 +209,50 @@ Body esperado:
 }
 ```
 
+	- `403 Forbidden` si la cuenta del usuario está bloqueada/suspendida.
+
+```json
+{
+	"detail": "Tu cuenta está suspendida. Por favor, contacta a soporte."
+}
+```
+
 	- `422 Unprocessable Entity` si el payload es inválido (ej: email mal formado o campos faltantes).
+
+#### POST /login/google
+
+Autentica un usuario a través de Google OAuth 2.0 utilizando su ID token. Si el usuario no existe, se creará uno nuevo automáticamente junto a su perfil. Si el usuario ya existe con ese email pero no está vinculado a Google, se vinculará su cuenta.
+
+Body esperado:
+
+```json
+{
+	"google_id_token": "<google_id_token>"
+}
+```
+
+- `200 OK`
+
+```json
+{
+	"access_token": "<jwt>",
+	"refresh_token": "<jwt>",
+	"token_type": "bearer",
+	"expires_in": 3600,
+	"refresh_expires_in": 604800
+}
+```
+
+- Errores:
+	- `400 Bad Request` si falta algún parámetro, los claims requeridos o el email de Google no está verificado.
+	- `401 Unauthorized` si el token de Google es inválido o expiró.
+	- `502 Bad Gateway` si no se puede verificar el token con los servidores de Google.
 
 #### POST /admin/login
 
 Autentica un usuario administrador y devuelve JWT (access y refresh tokens). Usa el mismo body y la misma respuesta que `/login`, pero solo permite usuarios activos con `is_admin=true`.
 
-- `401 Unauthorized` si las credenciales son invalidas, el usuario esta inactivo o no es admin.
+- `401 Unauthorized` si las credenciales son inválidas, el usuario está inactivo o no es admin.
 
 ```json
 {
@@ -215,9 +283,9 @@ Authorization: Bearer <token>
 ```
 
 - `401 Unauthorized` si falta el token o no se puede validar.
-- `403 Forbidden` si el usuario existe pero esta inactivo o no es admin.
+- `403 Forbidden` si el usuario existe pero está inactivo o no es admin.
 
-#### POST /auth/forgot-password
+#### POST /forgot-password
 
 Inicia el proceso de recuperación de contraseña enviando un código al email registrado.
 
@@ -242,7 +310,7 @@ Body esperado:
 	- El código de 6 dígitos se envía por email y expira en 15 minutos.
 	- No tiene errores específicos (siempre retorna 200).
 
-#### POST /auth/verify-code
+#### POST /verify-code
 
 Verifica que el código de recuperación sea válido.
 
@@ -288,7 +356,7 @@ o
 }
 ```
 
-#### POST /auth/reset-password
+#### POST /reset-password
 
 Completa la recuperación de contraseña actualizando con una nueva contraseña.
 
@@ -341,7 +409,8 @@ Body esperado:
 	]
 }
 ```
-#### DELETE /auth/logout
+
+#### DELETE /logout
 
 Revoca todos los tokens activos del usuario (logout / cierre de sesión). Requiere un token válido en el header `Authorization`.
 
@@ -361,26 +430,86 @@ Authorization: Bearer <token>
 	"detail": "Could not validate credentials"
 }
 ```
-#### DELETE /auth/logout
 
-Revoca todos los tokens activos del usuario (logout / cierre de sesión). Requiere un token válido en el header `Authorization`.
+### Gestión de Usuarios (admin)
 
-Header requerido:
+Endpoints para la administración de usuarios. Requieren token de administrador (`Authorization: Bearer <token>`).
 
-```http
-Authorization: Bearer <token>
-```
+#### GET /admin/users
 
-- `204 No Content` — Logout exitoso, no hay body en la respuesta.
+Lista todos los usuarios registrados (con paginación y opción de búsqueda).
 
-- Errores:
-	- `401 Unauthorized` si falta el token, el token es inválido, o el usuario está inactivo.
+Query params:
+- `page`: Número de página (mínimo 1, default 1).
+- `size`: Cantidad de elementos por página (entre 1 y 100, default 10).
+- `search`: Filtro opcional para buscar usuarios por nombre.
+
+- `200 OK`
 
 ```json
 {
-	"detail": "Could not validate credentials"
+	"items": [
+		{
+			"id": "a6b8f6f3-8d70-4f59-9f51-92f8a27ec0ba",
+			"email": "user@example.com",
+			"name": "Regular User",
+			"is_active": true,
+			"is_admin": false,
+			"created_at": "2026-06-20T10:15:30.123456"
+		}
+	],
+	"total": 1,
+	"page": 1,
+	"size": 10
 }
 ```
+
+- Errores:
+	- `401 Unauthorized` si falta el token o no se puede validar.
+	- `403 Forbidden` si el usuario no es admin.
+	- `422 Unprocessable Entity` si los parámetros son inválidos.
+
+#### PATCH /admin/users/{user_id}/block
+
+Bloquea a un usuario (desactiva su cuenta, revoca sus tokens en el servicio de autenticación y suspende sus productos en el catálogo). Un administrador no puede bloquearse a sí mismo.
+
+- `200 OK`
+
+```json
+{
+	"message": "Usuario y productos bloqueados correctamente"
+}
+```
+
+- Errores:
+	- `400 Bad Request` si el administrador intenta bloquearse a sí mismo.
+	- `401 Unauthorized` / `403 Forbidden` si no hay admin autenticado.
+	- `404 Not Found` si el usuario no existe.
+	- `503 Service Unavailable` si el servicio de catálogo no está disponible (la operación se revierte y el usuario no queda bloqueado).
+
+#### PATCH /admin/users/{user_id}/unblock
+
+Desbloquea a un usuario (reactiva su cuenta y rehabilita sus productos en el catálogo).
+
+- `200 OK`
+
+```json
+{
+	"message": "Usuario y productos desbloqueados correctamente"
+}
+```
+
+- Errores:
+	- `401 Unauthorized` / `403 Forbidden` si no hay admin autenticado.
+	- `404 Not Found` si el usuario no existe.
+	- `503 Service Unavailable` si el servicio de catálogo no está disponible (la operación se revierte).
+
+#### GET /metrics
+
+Retorna las métricas internas de Prometheus (OpenTelemetry). Utilizado por sistemas de monitoreo.
+
+- `200 OK` — `Content-Type: text/plain; version=0.0.4`
+(Contenido con formato estándar de Prometheus)
 
 ### Métricas (admin)
 
@@ -454,12 +583,24 @@ date,new_users
 	- `422 Unprocessable Entity` si faltan fechas o el rango es inválido.
 
 ## Mapeo de Rutas
-Las rutas del microservicio se mapean al ambiente de kubernetes con pequeñas diferencias:
-* `/auth/login` -> `/login`
-* `/auth/register` -> `/register`
-* `/users/admin/metrics/*` -> `/users/admin/metrics/*` (vía API Gateway)
-* `/livez` -> `/livez`
-* `/readyz` -> `/readyz`
+
+Las rutas del microservicio se exponen a través del Ingress Controller de Kubernetes (`k8s/ingress.yaml`) con el siguiente mapeo:
+
+* `/login` -> `/login`
+* `/register` -> `/register`
+* `/logout` -> `/logout`
+* `/forgot-password` -> `/forgot-password`
+* `/verify-code` -> `/verify-code`
+* `/reset-password` -> `/reset-password`
+* `/admin/login` -> `/admin/login`
+* `/admin/me` -> `/admin/me`
+* `/admin/users` -> `/admin/users`
+* `/admin/users/{user_id}/block` -> `/admin/users/{user_id}/block`
+* `/admin/users/{user_id}/unblock` -> `/admin/users/{user_id}/unblock`
+* `/login/google` -> `/login/google`
+* `/users/admin/metrics/*` -> `/users/admin/metrics/*` (vía API Gateway/Ingress)
+* `/users/livez` -> `/livez` (reescrito internamente)
+* `/users/readyz` -> `/readyz` (reescrito internamente)
 
 Esto se configura en el [ingress controller config](k8s/ingress.yaml) de este microservicio 
 
@@ -506,27 +647,39 @@ doctl kubernetes cluster kubeconfig save <CLUSTER_ID>
 |--------|------|-------------|
 | GET | `/livez` | Liveness probe — siempre 200 |
 | GET | `/readyz` | Readiness probe — verifica conexión a DB |
-| POST | `/auth/register` | Registro de usuario |
-| POST | `/auth/login` | Login y emisión de tokens JWT (access + refresh) |
+| POST | `/register` | Registro de usuario |
+| POST | `/login` | Login y emisión de tokens JWT (access + refresh) |
+| POST | `/login/google` | Login/Registro con Google OAuth 2.0 |
 | POST | `/admin/login` | Login exclusivo para usuarios administradores |
 | GET | `/admin/me` | Datos del administrador autenticado |
+| GET | `/admin/users` | Listar usuarios con paginación y búsqueda |
+| PATCH | `/admin/users/{user_id}/block` | Bloquear usuario y sus productos en el catálogo |
+| PATCH | `/admin/users/{user_id}/unblock` | Desbloquear usuario y sus productos |
 | GET | `/users/admin/metrics/users` | Métricas de usuarios (resumen + serie temporal) |
 | GET | `/users/admin/metrics/users/export` | Exportar métricas de usuarios a CSV |
-| POST | `/auth/forgot-password` | Inicia recuperación de contraseña (envía código por email) |
-| POST | `/auth/verify-code` | Verifica código de recuperación |
-| POST | `/auth/reset-password` | Completa cambio de contraseña |
+| POST | `/forgot-password` | Inicia recuperación de contraseña (código por email) |
+| POST | `/verify-code` | Verifica código de recuperación |
+| POST | `/reset-password` | Completa cambio de contraseña |
+| GET | `/metrics` | Métricas de Prometheus internas |
 | GET | `/docs` | Swagger UI (auto-generado) |
 | GET | `/redoc` | ReDoc (auto-generado) |
 
-## Administradores
+## Administradores y Migraciones
 
-En entornos existentes, aplicar primero la migracion SQL idempotente:
+En entornos existentes, es necesario aplicar las siguientes migraciones SQL para disponer de todas las columnas e índices necesarios:
 
 ```bash
+# 1. Agregar columna is_admin
 psql "$DATABASE_URL" -f scripts/add_is_admin_column.sql
+
+# 2. Agregar soporte para Google Auth (hace que password sea opcional y añade google_id)
+psql "$DATABASE_URL" -f scripts/add_google_auth.sql
+
+# 3. Agregar índice de fecha de creación para rendimiento en métricas
+psql "$DATABASE_URL" -f scripts/add_users_created_at_index.sql
 ```
 
-Luego crear o promover el primer administrador:
+Luego, para crear o promover el primer administrador, define las variables y ejecuta:
 
 ```bash
 export ADMIN_EMAIL=admin@example.com
@@ -535,7 +688,7 @@ export ADMIN_NAME='Admin User'
 python scripts/seed_admin.py
 ```
 
-Si el usuario ya existe, el script lo promueve a `is_admin=true` y asegura `is_active=true` sin cambiar su password.
+Si el usuario ya existe, el script lo promueve a `is_admin=true` y asegura `is_active=true` sin cambiar su contraseña.
 
 ## Tests
 
