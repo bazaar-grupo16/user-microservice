@@ -638,6 +638,49 @@
         }
       }
     },
+    "/internal/users/{user_id}/status": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Get User Status",
+        "operationId": "get_user_status_internal_users__user_id__status_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users/admin/metrics/users": {
       "get": {
         "tags": [
@@ -1074,6 +1117,19 @@
           "created_at"
         ],
         "title": "UserResponse"
+      },
+      "UserStatusResponse": {
+        "properties": {
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_active"
+        ],
+        "title": "UserStatusResponse"
       },
       "UsersMetricResponse": {
         "properties": {
