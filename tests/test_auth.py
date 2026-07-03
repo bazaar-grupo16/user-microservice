@@ -930,6 +930,81 @@ class TestVerifyCode:
         assert response.json() == {"detail": "Usuario no encontrado"}
 
 
+class TestUserStatus:
+    def _create_user(
+        self,
+        email: str,
+        is_admin: bool = False,
+        is_active: bool = True,
+    ) -> User:
+        user = User(
+            id=uuid4(),
+            email=email,
+            password=get_password_hash("Correct-P4ssw0rd!"),
+            name="Status Test User",
+            is_active=is_active,
+            is_admin=is_admin,
+        )
+        return asyncio.run(_add_and_detach(user))
+
+    def test_status_returns_true_for_active_user(self, client: TestClient) -> None:
+        user = self._create_user(email=f"status-active-{uuid4().hex}@example.com")
+
+        response = client.get(f"/internal/users/{user.id}/status")
+
+        assert response.status_code == 200
+        assert response.json() == {"is_active": True}
+
+    def test_status_returns_false_for_blocked_user(self, client: TestClient) -> None:
+        user = self._create_user(
+            email=f"status-blocked-{uuid4().hex}@example.com", is_active=False
+        )
+
+        response = client.get(f"/internal/users/{user.id}/status")
+
+        assert response.status_code == 200
+        assert response.json() == {"is_active": False}
+
+    def test_status_sets_no_store_cache_header(self, client: TestClient) -> None:
+        user = self._create_user(email=f"status-nocache-{uuid4().hex}@example.com")
+
+        response = client.get(f"/internal/users/{user.id}/status")
+
+        assert response.headers["cache-control"] == "no-store"
+
+    def test_status_returns_404_for_unknown_user(self, client: TestClient) -> None:
+        response = client.get(f"/internal/users/{uuid4()}/status")
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Usuario no encontrado"}
+
+    def test_status_returns_422_for_invalid_uuid(self, client: TestClient) -> None:
+        response = client.get("/internal/users/not-a-uuid/status")
+
+        assert response.status_code == 422
+
+    def test_status_reflects_block_after_admin_blocks_user(self, client: TestClient) -> None:
+        # The reason this endpoint exists: once an admin blocks a user, the
+        # status must flip to false immediately, even while an already-issued
+        # JWT is still cryptographically valid.
+        admin = self._create_user(
+            email=f"status-admin-{uuid4().hex}@example.com", is_admin=True
+        )
+        target = self._create_user(email=f"status-target-{uuid4().hex}@example.com")
+
+        before = client.get(f"/internal/users/{target.id}/status")
+        assert before.json() == {"is_active": True}
+
+        block = client.patch(
+            f"/admin/users/{target.id}/block",
+            headers={"Authorization": f"Bearer token-for-{admin.id}"},
+        )
+        assert block.status_code == 200
+
+        after = client.get(f"/internal/users/{target.id}/status")
+        assert after.json() == {"is_active": False}
+
+
 class TestForgotPassword:
     def test_forgot_password_returns_200_for_registered_email(self, client: TestClient, monkeypatch) -> None:
         import resend

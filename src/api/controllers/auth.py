@@ -214,6 +214,13 @@ async def unblock_user(db: AsyncSession, user_id: uuid.UUID, current_admin: User
     return {"message": "Usuario y productos desbloqueados correctamente"}
 
 
+async def get_user_status(db: AsyncSession, user_id: uuid.UUID) -> User:
+    user = await user_repo.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    return user
+
+
 async def logout_user(user: object) -> None:
     """Logout a user by revoking their tokens at the auth service."""
     await auth_client.delete_token(user_id=user.id)

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, status, Query
+from fastapi import APIRouter, Response, status, Query
 
 from src.core.dependencies import AdminUser, DbSession, AuthenticatedUser
-from src.schemas.user import AdminMeResponse, LoginResponse, UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, MessageResponse, VerifyCodeRequest, ResetPasswordRequest, PaginatedUserResponse, GoogleLoginRequest
+from src.schemas.user import AdminMeResponse, LoginResponse, UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, MessageResponse, VerifyCodeRequest, ResetPasswordRequest, PaginatedUserResponse, GoogleLoginRequest, UserStatusResponse
 from src.api.controllers import auth as auth_controller
 import uuid
 
@@ -69,3 +69,14 @@ async def block_user(user_id: uuid.UUID, admin_user: AdminUser, db: DbSession):
 @router.patch("/admin/users/{user_id}/unblock", response_model=MessageResponse, status_code=status.HTTP_200_OK)
 async def unblock_user(user_id: uuid.UUID, admin_user: AdminUser, db: DbSession):
     return await auth_controller.unblock_user(db=db, user_id=user_id, current_admin=admin_user)
+
+
+@router.get("/internal/users/{user_id}/status", response_model=UserStatusResponse, status_code=status.HTTP_200_OK)
+async def get_user_status(user_id: uuid.UUID, db: DbSession, response: Response):
+    # Live source of truth for whether a user is enabled. Meant for
+    # cluster-internal service-to-service calls (not exposed on the ingress),
+    # so a caller can confirm a still-valid JWT does not belong to a user that
+    # has since been blocked. Never cache: staleness would reintroduce the lag
+    # this endpoint exists to close.
+    response.headers["Cache-Control"] = "no-store"
+    return await auth_controller.get_user_status(db=db, user_id=user_id)
